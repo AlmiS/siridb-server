@@ -1,11 +1,8 @@
 cmake_minimum_required(VERSION 3.6)
 project(siridb-server)
 
-set(CMAKE_C_STANDARD)
-
-IF(CMAKE_BUILD_TYPE MATCHES Debug)
-    set(CMAKE_C_FLAGS_DEBUG "-DDEBUG=1 -Wall")
-ENDIF(CMAKE_BUILD_TYPE MATCHES DEBUG)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_FLAGS_DEBUG "-DDEBUG=1 -Wall")
 
 set(SOURCE_FILES
         include/argparse/argparse.h

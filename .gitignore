@@ -69,6 +69,7 @@ grammar/pygrammar/
 # Clion
 .idea/
 cmake-build-debug
+cmake-build-release
 
 # CMake
 CMakeCache.txt
