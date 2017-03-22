@@ -31,8 +31,7 @@
 # Debug files
 *.dSYM/
 
-/Debug/siridb-server
-/Release/siridb-server
+siridb-server
 *.d
 *.d
 /testdir
@@ -66,6 +65,21 @@ grammar/pygrammar/
 
 # VS Code
 .vscode/
+
+# Clion
+.idea/
+cmake-build-debug
+
+# CMake
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
 
 # Test
 test/testdir
