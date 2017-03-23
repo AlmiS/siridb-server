@@ -56,8 +56,8 @@ if (ssocket->siridb == NULL)                                                   \
     return;                                                                    \
 }
 
-static const int SERVER_RUNNING_REINDEXING =
-        SERVER_FLAG_RUNNING + SERVER_FLAG_REINDEXING;
+/*static const int SERVER_RUNNING_REINDEXING =
+        SERVER_FLAG_RUNNING + SERVER_FLAG_REINDEXING;*/
 
 static uv_loop_t * loop = NULL;
 static struct sockaddr_storage client_addr;
@@ -448,10 +448,8 @@ static void on_insert(uv_stream_t * client, sirinet_pkg_t * pkg)
 
     siridb_t * siridb = ssocket->siridb;
 
-    /* only when when the flag is EXACTLY running or
-     * running + re-indexing we can continue */
-    if (    siridb->server->flags != SERVER_FLAG_RUNNING &&
-            siridb->server->flags != SERVER_RUNNING_REINDEXING)
+    /* only when when the flag is EXACTLY running or */
+    if (    siridb->server->flags != SERVER_FLAG_RUNNING )
     {
         CLSERVER_send_server_error(siridb, (uv_stream_t *) client, pkg);
         return;
@@ -699,19 +697,7 @@ static void on_register_server(uv_stream_t * client, sirinet_pkg_t * pkg)
                 CPROTO_ERR_SERVER,
                 err_msg);
     }
-    if (siridb->flags & SIRIDB_FLAG_REINDEXING)
-    {
-        snprintf(err_msg,
-                SIRIDB_MAX_SIZE_ERR_MSG,
-                "Cannot register new server because the database has not "
-                "finished re-indexing");
-        package = sirinet_pkg_err(
-                pkg->pid,
-                strlen(err_msg),
-                CPROTO_ERR_MSG,
-                err_msg);
-    }
-    else if (!siridb_user_check_access(
+    if (!siridb_user_check_access(
             (siridb_user_t *) ssocket->origin,
             SIRIDB_ACCESS_PROFILE_FULL,
             err_msg))

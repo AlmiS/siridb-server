@@ -303,15 +303,6 @@ siridb_t * siridb_new(const char * dbpath, int lock_flags)
     log_info("Initialize pools");
     siridb_pools_init(siridb);
 
-    if (!siri_err)
-    {
-        siridb->reindex = siridb_reindex_open(siridb, 0);
-        if (siridb->reindex != NULL && siridb->replica == NULL)
-        {
-            siridb_reindex_start(siridb->reindex->timer);
-        }
-    }
-
     siridb->start_ts = time(NULL);
 
     uv_mutex_lock(&siri.siridb_mutex);
@@ -620,11 +611,6 @@ void siridb__free(siridb_t * siridb)
         siridb_replicate_free(&siridb->replicate);
     }
 
-    if (siridb->reindex != NULL)
-    {
-        siridb_reindex_free(&siridb->reindex);
-    }
-
     /* free fifo (in case we have a replica) */
     if (siridb->fifo != NULL)
     {
@@ -757,7 +743,6 @@ static siridb_t * SIRIDB_new(void)
                         siridb->replica = NULL;
                         siridb->fifo = NULL;
                         siridb->replicate = NULL;
-                        siridb->reindex = NULL;
                         siridb->groups = NULL;
 
                         /* make file pointers are NULL when file is closed */

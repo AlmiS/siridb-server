@@ -428,7 +428,7 @@ static void GROUPS_loop(uv_work_t * work)
     {
         sleep(GROUPS_LOOP_SLEEP);
 
-        if (siridb_is_reindexing(siridb) && (++mod_test % GROUPS_LOOP_DEEP))
+        if (++mod_test % GROUPS_LOOP_DEEP)
         {
             continue;
         }

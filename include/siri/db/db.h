@@ -26,13 +26,10 @@
 #include <uv.h>
 #include <siri/db/fifo.h>
 #include <siri/db/replicate.h>
-#include <siri/db/reindex.h>
 #include <siri/db/groups.h>
 
 #define SIRIDB_MAX_SIZE_ERR_MSG 1024
 #define SIRIDB_MAX_DBNAME_LEN 256  // 255 + NULL
-
-#define SIRIDB_FLAG_REINDEXING 1
 
 #define SIRIDB_GET_FN(FN, __path, FILENAME)                         \
     char FN[strlen(__path) + strlen(FILENAME) + 1]; 				\
@@ -64,7 +61,6 @@ typedef struct imap_s imap_t;
 typedef struct imap_s imap_t;
 typedef struct siridb_fifo_s siridb_fifo_t;
 typedef struct siridb_replicate_s siridb_replicate_t;
-typedef struct siridb_reindex_s siridb_reindex_t;
 typedef struct siridb_groups_s siridb_groups_t;
 
 typedef struct siridb_s
@@ -107,7 +103,6 @@ typedef struct siridb_s
     qp_fpacker_t * store;
     siridb_fifo_t * fifo;
     siridb_replicate_t * replicate;
-    siridb_reindex_t * reindex;
     siridb_groups_t * groups;
 } siridb_t;
 
@@ -126,5 +121,3 @@ void siridb__free(siridb_t * siridb);
 
 #define siridb_incref(siridb) siridb->ref++
 #define siridb_decref(_siridb) if (!--_siridb->ref) siridb__free(_siridb)
-
-#define siridb_is_reindexing(siridb) (siridb->flags & SIRIDB_FLAG_REINDEXING)

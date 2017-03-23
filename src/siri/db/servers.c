@@ -292,9 +292,6 @@ int siridb_servers_register(siridb_t * siridb, siridb_server_t * server)
                     server->name);
             return -1;
         }
-
-        /* this is a new server for a new pool */
-        siridb->reindex = siridb_reindex_open(siridb, 1);
     }
 
     if (llist_append(siridb->servers, server) || siridb_servers_save(siridb))
@@ -311,10 +308,6 @@ int siridb_servers_register(siridb_t * siridb, siridb_server_t * server)
      */
     siri_heartbeat_force();
 
-    if (siridb->reindex != NULL)
-    {
-        siridb_reindex_start(siridb->reindex->timer);
-    }
 
     return 0;
 
@@ -648,9 +641,6 @@ int siridb_servers_list(siridb_server_t * server, uv_async_t * handle)
             break;
         case CLERI_GID_K_RECEIVED_POINTS:
             qp_add_int64(query->packer, siridb->received_points);
-            break;
-        case CLERI_GID_K_REINDEX_PROGRESS:
-            qp_add_string(query->packer, siridb_reindex_progress(siridb));
             break;
         case CLERI_GID_K_SYNC_PROGRESS:
             qp_add_string(query->packer, siridb_initsync_sync_progress(siridb));

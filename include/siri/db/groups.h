@@ -11,6 +11,7 @@
  */
 #pragma once
 
+#include <siri/db/series.h>
 #include <ctree/ctree.h>
 #include <slist/slist.h>
 #include <uv.h>
@@ -39,6 +40,9 @@ typedef struct siridb_groups_s
     uv_mutex_t mutex;
     uv_work_t work;
 } siridb_groups_t;
+
+typedef struct siridb_s siridb_t;
+typedef struct siridb_series_s siridb_series_t;
 
 siridb_groups_t * siridb_groups_new(siridb_t * siridb);
 void siridb_groups_start(siridb_groups_t * groups);
