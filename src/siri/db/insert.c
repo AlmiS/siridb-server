@@ -13,7 +13,6 @@
 #include <logger/logger.h>
 #include <qpack/qpack.h>
 #include <siri/async.h>
-#include <siri/db/forward.h>
 #include <siri/db/insert.h>
 #include <siri/db/points.h>
 #include <siri/db/replicate.h>
@@ -57,8 +56,7 @@ static int INSERT_local_work_test(
         siridb_t * siridb,
         qp_unpacker_t * unpacker,
         qp_obj_t * qp_series_name,
-        siridb_pcache_t ** pcache,
-        siridb_forward_t ** forward);
+        siridb_pcache_t ** pcache);
 static void INSERT_local_task(uv_async_t * handle);
 static void INSERT_local_promise_cb(
         sirinet_promise_t * promise,
@@ -316,7 +314,6 @@ int insert_init_backend_local(
     ilocal->siridb = siridb;
     ilocal->flags = flags;
     ilocal->status = INSERT_LOCAL_CANCELLED;
-    ilocal->forward = NULL;
     ilocal->pcache = NULL;
 
     promise->pkg = sirinet_pkg_dup(pkg);
@@ -445,26 +442,6 @@ static void INSERT_local_free_cb(uv_async_t * handle)
 
     /* this destroys the pkg and unpacker */
     free(ilocal->promise->pkg);
-
-    if (ilocal->forward != NULL)
-    {
-        uv_async_t * fwd = (uv_async_t *) malloc(sizeof(uv_async_t));
-        if (fwd == NULL || siri_err)
-        {
-            if (fwd == NULL)
-            {
-                ERR_ALLOC
-            }
-            ilocal->status = INSERT_LOCAL_ERROR;
-            siridb_forward_free(ilocal->forward);
-        }
-        else
-        {
-            uv_async_init(siri.loop, fwd, siridb_forward_points_to_pools);
-            fwd->data = (void *) ilocal->forward;
-            uv_async_send(fwd);
-        }
-    }
 
     ilocal->promise->cb(ilocal->promise, NULL, ilocal->status);
 
@@ -612,12 +589,10 @@ static int INSERT_local_work_test(
         siridb_t * siridb,
         qp_unpacker_t * unpacker,
         qp_obj_t * qp_series_name,
-        siridb_pcache_t ** pcache,
-        siridb_forward_t ** forward)
+        siridb_pcache_t ** pcache)
 {
     qp_types_t tp;
     siridb_series_t * series;
-    uint16_t pool;
     uint64_t * ts;
     const char * series_name;
     char * pt;
@@ -638,74 +613,31 @@ static int INSERT_local_work_test(
         series = (siridb_series_t *) ct_get(siridb->series, series_name);
         if (series == NULL)
         {
-            /* the series does not exist so check what to do... */
-            pool = siridb_lookup_sn(siridb->pools->lookup, series_name);
+            /* the series does not exist so create the series and add the points.*/
 
-            if (pool == siridb->server->pool)
+            /* save pointer position and read series type */
+            pt = unpacker->pt;
+            qp_next(unpacker, NULL); // array open
+            qp_next(unpacker, NULL); // first point array2
+            qp_next(unpacker, NULL); // first ts
+            qp_next(unpacker, &qp_series_val); // first val
+
+            /* restore pointer position */
+            unpacker->pt = pt;
+
+            series = siridb_series_new(
+                    siridb,
+                    series_name,
+                    SIRIDB_QP_MAP2_TP(qp_series_val.tp));
+
+            if (series == NULL ||
+                ct_add(siridb->series, series->name, series))
             {
-                /*
-                 * This is the correct pool so create the series and
-                 * add the points.
-                 */
-
-                /* save pointer position and read series type */
-                pt = unpacker->pt;
-                qp_next(unpacker, NULL); // array open
-                qp_next(unpacker, NULL); // first point array2
-                qp_next(unpacker, NULL); // first ts
-                qp_next(unpacker, &qp_series_val); // first val
-
-                /* restore pointer position */
-                unpacker->pt = pt;
-
-                series = siridb_series_new(
-                        siridb,
-                        series_name,
-                        SIRIDB_QP_MAP2_TP(qp_series_val.tp));
-
-                if (series == NULL ||
-                    ct_add(siridb->series, series->name, series))
-                {
-                    log_critical("Error creating series: '%s'", series_name);
-                    return INSERT_LOCAL_ERROR;  /* signal is raised */
-                }
-
-                n -= WEIGHT_NEW_SERIES;
+                log_critical("Error creating series: '%s'", series_name);
+                return INSERT_LOCAL_ERROR;  /* signal is raised */
             }
-            else if (siridb->replica == NULL ||
-                    siridb_series_server_id_by_name(series_name) ==
-                            siridb->server->id)
-            {
-                /*
-                 * Forward the series to the correct pool because 'this' server
-                 * is responsible for the series.
-                 */
-                if (*forward == NULL)
-                {
-                    if ((*forward = siridb_forward_new(siridb)) == NULL)
-                    {
-                        return INSERT_LOCAL_ERROR;  /* signal is raised */
-                    }
-                }
-                /* testing is not needed since we check for siri_err later */
-                qp_add_raw(
-                        (*forward)->packer[pool],
-                        series_name,
-                        qp_series_name->len);
-                qp_packer_extend_fu((*forward)->packer[pool], unpacker);
-                qp_next(unpacker, qp_series_name);
-                continue;  /* expected to be 0 */
-            }
-            else
-            {
-                /*
-                 * Skip this series since it will forwarded to the correct
-                 * pool by the replica server.
-                 */
-                qp_skip_next(unpacker);  // array
-                qp_next(unpacker, qp_series_name);
-                continue;  /* expected to be 0 */
-            }
+
+            n -= WEIGHT_NEW_SERIES;
         }
 
         qp_next(unpacker, NULL); // array open
@@ -834,8 +766,7 @@ static void INSERT_local_task(uv_async_t * handle)
                 siridb,
                 unpacker,
                 &ilocal->qp_series_name,
-                &ilocal->pcache,
-                &ilocal->forward))
+                &ilocal->pcache))
         {
             ilocal->status = INSERT_LOCAL_ERROR;
         }
@@ -948,7 +879,6 @@ static int INSERT_init_local(
     qp_unpacker_init(&ilocal->unpacker, pkg->data, pkg->len);
     ilocal->flags = flags;
     ilocal->status = INSERT_LOCAL_CANCELLED;
-    ilocal->forward = NULL;
     ilocal->pcache = NULL;
 
     promise->pkg = pkg;
@@ -1092,15 +1022,16 @@ static void INSERT_points_to_pools(uv_async_t * handle)
  */
 static uint16_t INSERT_get_pool(siridb_t * siridb, qp_obj_t * qp_series_name)
 {
-    uint16_t pool;
+/*    uint16_t pool;
 
-    /* select the correct pool */
+    *//* select the correct pool *//*
     pool = siridb_lookup_sn_raw(
             siridb->pools->lookup,
             qp_series_name->via.raw,
-            qp_series_name->len);
+            qp_series_name->len);*/
 
-    return pool;
+    // Insertions are always performed to the current pool
+    return siridb->server->pool;
 }
 
 /*

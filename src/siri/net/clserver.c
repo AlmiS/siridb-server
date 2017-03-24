@@ -88,12 +88,6 @@ static void CLSERVER_on_register_server_response(
         slist_t * promises,
         siridb_server_async_t * server_reg);
 
-#define POOL_ERR_MSG \
-    "At least one pool has no server available to process the request"
-
-#define POOL_ERR_LEN 64  // exact length of POOL_ERR_MSG
-
-
 int sirinet_clserver_init(siri_t * siri)
 {
 #ifdef DEBUG
@@ -334,29 +328,6 @@ static void CLSERVER_send_server_error(
     }
 }
 
-/*
- * A signal is raised in case an allocation error occurred.
- */
-static void CLSERVER_send_pool_error(
-        uv_stream_t * stream,
-        sirinet_pkg_t * pkg)
-{
-    log_debug(POOL_ERR_MSG);
-
-    sirinet_pkg_t * package = sirinet_pkg_err(
-            pkg->pid,
-            POOL_ERR_LEN,
-            CPROTO_ERR_POOL,
-            POOL_ERR_MSG);
-
-    if (package != NULL)
-    {
-        /* ignore result code, signal can be raised */
-        sirinet_pkg_send(stream, package);
-
-    }
-}
-
 static void on_query(uv_stream_t * client, sirinet_pkg_t * pkg)
 {
     CHECK_SIRIDB(ssocket)
@@ -448,18 +419,20 @@ static void on_insert(uv_stream_t * client, sirinet_pkg_t * pkg)
 
     siridb_t * siridb = ssocket->siridb;
 
-    /* only when when the flag is EXACTLY running or */
+    /* only when when the flag is EXACTLY running */
     if (    siridb->server->flags != SERVER_FLAG_RUNNING )
     {
         CLSERVER_send_server_error(siridb, (uv_stream_t *) client, pkg);
         return;
     }
 
-    if (!siridb_pools_accessible(siridb))
+
+    // Skip this check as we will always insert to the local pool
+    /*if (!siridb_pools_accessible(siridb))
     {
         CLSERVER_send_pool_error(client, pkg);
         return;
-    }
+    }*/
 
     qp_unpacker_t unpacker;
     qp_unpacker_init(&unpacker, pkg->data, pkg->len);

@@ -45,7 +45,6 @@ typedef struct siridb_s siridb_t;
 typedef struct qp_unpacker_s qp_unpacker_t;
 typedef struct qp_packer_s qp_packer_t;
 typedef struct qp_obj_s qp_obj_t;
-typedef struct siridb_forward_s siridb_forward_t;
 
 typedef struct siridb_insert_s
 {
@@ -69,7 +68,6 @@ typedef struct siridb_insert_local_s
     qp_obj_t qp_series_name;
     siridb_t * siridb;
     sirinet_promise_t * promise;
-    siridb_forward_t * forward;
     siridb_pcache_t * pcache;
 } siridb_insert_local_t;
 
