@@ -80,9 +80,6 @@ static void CLSERVER_send_server_error(
         siridb_t * siridb,
         uv_stream_t * stream,
         sirinet_pkg_t * pkg);
-static void CLSERVER_send_pool_error(
-        uv_stream_t * stream,
-        sirinet_pkg_t * pkg);
 static int CLSERVER_on_info_cb(siridb_t * siridb, qp_packer_t * packer);
 static void CLSERVER_on_register_server_response(
         slist_t * promises,

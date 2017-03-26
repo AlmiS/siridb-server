@@ -236,6 +236,7 @@ static int SIRI_load_databases(void)
                 siri.cfg->default_db_path);
         return -1;
     }
+    
 
     while((dbpath = readdir(db_container_path)) != NULL)
     {
