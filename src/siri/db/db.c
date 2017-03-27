@@ -52,30 +52,6 @@ static siridb_t * SIRIDB_new(void);
     *siridb = NULL;                         \
     return -1;
 
-/*
- * Check if at least database.conf and database.dat exist in the path.
- */
-int siridb_is_db_path(const char * dbpath)
-{
-    char buffer[PATH_MAX];
-    snprintf(buffer,
-            PATH_MAX,
-            "%sdatabase.conf",
-            dbpath);
-    if (!xpath_file_exist(buffer))
-    {
-        return 0;  /* false */
-    }
-    snprintf(buffer,
-            PATH_MAX,
-            "%sdatabase.dat",
-            dbpath);
-    if (!xpath_file_exist(buffer))
-    {
-        return 0;  /* false */
-    }
-    return 1;  /* true */
-}
 
 /*
  * Returns a siridb object or NULL in case of an error.
@@ -83,32 +59,28 @@ int siridb_is_db_path(const char * dbpath)
  * (lock_flags are simple parsed to the lock function)
  *
  */
-siridb_t * siridb_new(const char * dbpath, int lock_flags)
+siridb_t * siridb_new(siri_cfg_t *cfg, int lock_flags)
 {
-    size_t len = strlen(dbpath);
+    size_t len = strlen(cfg->default_db_path);
     lock_t lock_rc;
     char buffer[PATH_MAX];
-    cfgparser_t * cfgparser;
-    cfgparser_option_t * option = NULL;
-    qp_unpacker_t * unpacker;
     siridb_t * siridb;
     char err_msg[512];
-    int rc;
 
-    if (!len || dbpath[len - 1] != '/')
+    if (!len || cfg->default_db_path[len - 1] != '/')
     {
         log_error("Database path should end with a slash. (got: '%s')",
-                dbpath);
+                cfg->default_db_path);
         return NULL;
     }
 
-    if (!xpath_is_dir(dbpath))
+    if (!xpath_is_dir(cfg->default_db_path))
     {
-        log_error("Cannot find database path '%s'", dbpath);
+        log_error("Cannot find database path '%s'", cfg->default_db_path);
         return NULL;
     }
 
-    lock_rc = lock_lock(dbpath, lock_flags);
+    lock_rc = lock_lock(cfg->default_db_path, lock_flags);
 
     switch (lock_rc)
     {
@@ -117,110 +89,45 @@ siridb_t * siridb_new(const char * dbpath, int lock_flags)
     case LOCK_WRITE_ERR:
     case LOCK_READ_ERR:
     case LOCK_MEM_ALLOC_ERR:
-        log_error("%s (%s)", lock_str(lock_rc), dbpath);
+        log_error("%s (%s)", lock_str(lock_rc), cfg->default_db_path);
         return NULL;
     case LOCK_NEW:
-        log_info("%s (%s)", lock_str(lock_rc), dbpath);
+        log_info("%s (%s)", lock_str(lock_rc), cfg->default_db_path);
         break;
     case LOCK_OVERWRITE:
-        log_warning("%s (%s)", lock_str(lock_rc), dbpath);
+        log_warning("%s (%s)", lock_str(lock_rc), cfg->default_db_path);
         break;
     default:
         assert (0);
         break;
     }
 
-    /* read database.conf */
-    snprintf(buffer,
-            PATH_MAX,
-            "%sdatabase.conf",
-            dbpath);
-
-    cfgparser = cfgparser_new();
-    if (cfgparser == NULL)
-    {
-        return NULL;  /* signal is raised */
-    }
-    if ((rc = cfgparser_read(cfgparser, buffer)) != CFGPARSER_SUCCESS)
-    {
-        log_error("Could not read '%s': %s",
-                buffer,
-                cfgparser_errmsg(rc));
-        cfgparser_free(cfgparser);
-        return NULL;
-    }
-
-    snprintf(buffer,
-            PATH_MAX,
-            "%sdatabase.dat",
-            dbpath);
-
-    if ((unpacker = qp_unpacker_ff(buffer)) == NULL)
-    {
-        /* qp_unpacker has done some logging */
-        cfgparser_free(cfgparser);
-        return NULL;
-    }
-
-    if (siridb_from_unpacker(
-            unpacker,
+    if (siridb_from_consul(
             &siridb,
             err_msg))
     {
         log_error("Could not read '%s': %s", buffer, err_msg);
-        qp_unpacker_ff_free(unpacker);
-        cfgparser_free(cfgparser);
         return NULL;
     }
 
-    qp_unpacker_ff_free(unpacker);
-
-    log_info("Start loading database: '%s'", siridb->dbname);
-
     /* set dbpath */
-    siridb->dbpath = strdup(dbpath);
+    siridb->dbpath = strdup(cfg->default_db_path);
     if (siridb->dbpath == NULL)
     {
         ERR_ALLOC
         siridb_decref(siridb);
-        cfgparser_free(cfgparser);
         return NULL;
     }
-
-    /* read buffer_path from database.conf */
-    rc = cfgparser_get_option(
-                &option,
-                cfgparser,
-                "buffer",
-                "path");
-
-    if (rc == CFGPARSER_SUCCESS && option->tp == CFGPARSER_TP_STRING)
-    {
-        len = strlen(option->val->string);
-        siridb->buffer_path = NULL;
-        if (option->val->string[len - 1] == '/')
-        {
-            siridb->buffer_path = strdup(option->val->string);
-        }
-        else if (asprintf(&siridb->buffer_path, "%s/", option->val->string) < 0)
-        {
-            siridb->buffer_path = NULL;
-        }
-    }
-    else
-    {
-        siridb->buffer_path = siridb->dbpath;
-    }
-
-    /* free cfgparser */
-    cfgparser_free(cfgparser);
-
+    /* set buffer path */
+    siridb->buffer_path = strdup(cfg->buffer_path);
     if (siridb->buffer_path == NULL)
     {
         ERR_ALLOC
         siridb_decref(siridb);
         return NULL;
     }
+
+    log_info("Start loading database: '%s'", siridb->dbname);
 
     /* load users */
     if (siridb_users_load(siridb))
@@ -330,28 +237,12 @@ siridb_t * siridb_new(const char * dbpath, int lock_flags)
  * Returns 0 if successful or another value in case of an error.
  * (a SIGNAL can be set in case of an error)
  */
-int siridb_from_unpacker(
-        qp_unpacker_t * unpacker,
+
+int siridb_from_consul(
         siridb_t ** siridb,
         char * err_msg)
 {
-    *siridb = NULL;
-    qp_obj_t qp_obj;
-
-    if (!qp_is_array(qp_next(unpacker, NULL)) ||
-            qp_next(unpacker, &qp_obj) != QP_INT64)
-    {
-        sprintf(err_msg, "error: corrupted database file.");
-        return -1;
-    }
-
-    /* check schema */
-    if (qp_obj.via.int64 != SIRIDB_SHEMA)
-    {
-        sprintf(err_msg, "error: unsupported schema found: %" PRId64,
-                qp_obj.via.int64);
-        return -1;
-    }
+    char buffer[PATH_MAX];
 
     /* create a new SiriDB structure */
     *siridb = SIRIDB_new();
@@ -362,76 +253,60 @@ int siridb_from_unpacker(
     }
 
     /* read uuid */
-    if (qp_next(unpacker, &qp_obj) != QP_RAW || qp_obj.len != 16)
-    {
-        READ_DB_EXIT_WITH_ERROR("cannot read uuid.")
+    FILE * fp;
+    snprintf(buffer,
+             PATH_MAX,
+             "curl -s %s:%i/v1/agent/self | jq .Config.NodeID -r",
+             siri.cfg->consul_address,
+             siri.cfg->consul_port);
+
+    fp = popen(buffer, "r");
+    if (fp == NULL) {
+        READ_DB_EXIT_WITH_ERROR("cannot execute command to read own uuid from consul.")
     }
 
-    /* copy uuid */
-    memcpy(&(*siridb)->uuid, qp_obj.via.raw, qp_obj.len);
-
-    /* read database name */
-    if (qp_next(unpacker, &qp_obj) != QP_RAW ||
-            qp_obj.len >= SIRIDB_MAX_DBNAME_LEN)
-    {
-        READ_DB_EXIT_WITH_ERROR("cannot read database name.")
+    /* Read one line from the output and verify its the uuid */
+    if (fgets(buffer, PATH_MAX - 1, fp) != NULL) {
+        buffer[strcspn(buffer, "\n")] = 0;
+        log_debug("UUID from consul: %s ", buffer);
+        char * str_uuid = strndup(buffer, strlen(buffer));
+        if(uuid_parse(str_uuid, (*siridb)->uuid) != 0) {
+            READ_DB_EXIT_WITH_ERROR("Could not parse own uuid from consul.")
+        }
+    }
+    /* If we received multiple lines from the command or exit code is not 0 something went wrong */
+    if (fgets(buffer, PATH_MAX - 1, fp) != NULL || pclose(fp)/256 != 0) {
+        READ_DB_EXIT_WITH_ERROR("unexpected input received when trying to read own uuid from consul")
     }
 
-    /* alloc mem for database name */
-    (*siridb)->dbname = strndup(qp_obj.via.raw, qp_obj.len);
+    /*Create database name*/
+    (*siridb)->dbname = "brume";
     if ((*siridb)->dbname == NULL)
     {
         READ_DB_EXIT_WITH_ERROR("cannot allocate database name.")
     }
 
-    /* read time precision */
-    if (qp_next(unpacker, &qp_obj) != QP_INT64 ||
-            qp_obj.via.int64 < SIRIDB_TIME_SECONDS ||
-            qp_obj.via.int64 > SIRIDB_TIME_NANOSECONDS)
-    {
-        READ_DB_EXIT_WITH_ERROR("cannot read time-precision.")
-    }
-
     /* bind time precision to SiriDB */
-    (*siridb)->time =
-            siridb_time_new((siridb_timep_t) qp_obj.via.int64);
+    (*siridb)->time = siridb_time_new((siridb_timep_t) SIRIDB_TIME_SECONDS);
     if ((*siridb)->time == NULL)
     {
         READ_DB_EXIT_WITH_ERROR("cannot create time instance.")
     }
 
-    /* read buffer size */
-    if (qp_next(unpacker, &qp_obj) != QP_INT64)
-    {
-        READ_DB_EXIT_WITH_ERROR("cannot read buffer size.")
-    }
-
     /* bind buffer size and len to SiriDB */
-    (*siridb)->buffer_size = (size_t) qp_obj.via.int64;
+    (*siridb)->buffer_size = (size_t) 1024;
     (*siridb)->buffer_len = (*siridb)->buffer_size / sizeof(siridb_point_t);
 
-    /* read number duration  */
-    if (qp_next(unpacker, &qp_obj) != QP_INT64)
-    {
-        READ_DB_EXIT_WITH_ERROR("cannot read number duration.")
-    }
-
     /* bind number duration to SiriDB */
-    (*siridb)->duration_num = (uint64_t) qp_obj.via.int64;
+    (*siridb)->duration_num = (uint64_t) 3600; /* 1 hour */
 
     /* calculate 'shard_mask_num' based on number duration */
     (*siridb)->shard_mask_num =
             (uint16_t) sqrt((double) siridb_time_in_seconds(
                     *siridb, (*siridb)->duration_num)) / 24;
 
-    /* read log duration  */
-    if (qp_next(unpacker, &qp_obj) != QP_INT64)
-    {
-        READ_DB_EXIT_WITH_ERROR("cannot read log duration.")
-    }
-
     /* bind log duration to SiriDB */
-    (*siridb)->duration_log = (uint64_t) qp_obj.via.int64;
+    (*siridb)->duration_log = (uint64_t) 86400; /* 1 day */
 
     /* calculate 'shard_mask_log' based on log duration */
     (*siridb)->shard_mask_log =
@@ -441,36 +316,18 @@ int siridb_from_unpacker(
     log_debug("Set number duration mask to %d", (*siridb)->shard_mask_num);
     log_debug("Set log duration mask to %d", (*siridb)->shard_mask_log);
 
-    /* read timezone */
-    if (qp_next(unpacker, &qp_obj) != QP_RAW)
-    {
-        READ_DB_EXIT_WITH_ERROR("cannot read timezone.")
-    }
 
     /* bind timezone to SiriDB */
-    char * tzname = strndup(qp_obj.via.raw, qp_obj.len);
-
-    if (tzname == NULL)
-    {
-        READ_DB_EXIT_WITH_ERROR("cannot allocate timezone name.")
-    }
-
+    char * tzname = "NAIVE";
     if (((*siridb)->tz = iso8601_tz(tzname)) < 0)
     {
         log_critical("Unknown timezone found: '%s'.", tzname);
         free(tzname);
         READ_DB_EXIT_WITH_ERROR("cannot read timezone.")
     }
-    free(tzname);
 
-    /* read drop threshold */
-    if (qp_next(unpacker, &qp_obj) != QP_DOUBLE ||
-            qp_obj.via.real < 0.0 || qp_obj.via.real > 1.0)
-    {
-        READ_DB_EXIT_WITH_ERROR("cannot read drop threshold.")
-    }
-
-    (*siridb)->drop_threshold = qp_obj.via.real;
+    /* bind drop threshold */
+    (*siridb)->drop_threshold = 1.0;
 
     return 0;
 }

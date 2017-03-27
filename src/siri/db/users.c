@@ -22,7 +22,7 @@
 #include <time.h>
 #include <xpath/xpath.h>
 #include <owcrypt/owcrypt.h>
-
+#include <base64/base64.h>
 
 #ifndef __APPLE__
 /* Required for compatibility with version < 2.0.14 */
@@ -34,7 +34,7 @@
 
 inline static int USERS_cmp(siridb_user_t * user, const char * name);
 static int USERS_free(siridb_user_t * user, void * args);
-static int USERS_save(siridb_user_t * user, qp_fpacker_t * fpacker);
+static int USERS_save(siridb_user_t * user, char * buffer);
 
 #define MSG_ERR_CANNOT_WRITE_USERS "Could not write users to file!"
 
@@ -42,12 +42,9 @@ static int USERS_save(siridb_user_t * user, qp_fpacker_t * fpacker);
  * Returns 0 if successful or -1 in case of an error.
  * (a SIGNAL might be raised in case of an error)
  */
-int siridb_users_load(siridb_t * siridb)
-{
-    qp_unpacker_t * unpacker;
-    qp_obj_t qp_name;
-    qp_obj_t qp_password;
-    qp_obj_t qp_access_bit;
+
+int siridb_users_load(siridb_t * siridb) {
+    char buffer[PATH_MAX];
     siridb_user_t * user;
     char err_msg[SIRIDB_MAX_SIZE_ERR_MSG];
 
@@ -63,12 +60,76 @@ int siridb_users_load(siridb_t * siridb)
         return -1;  /* signal is raised */
     }
 
-    /* get user access file name */
-    SIRIDB_GET_FN(fn, siridb->dbpath, SIRIDB_USERS_FN)
+    /*Execute command to read users from consul, Key = username, Value = password, Flag = accessbit*/
+    snprintf(buffer,
+             PATH_MAX,
+             "curl -s %s:%i/v1/kv/%s%s/?recurse | jq '.[] | .Key, .Value, .Flags' -r",
+             siri.cfg->consul_address,
+             siri.cfg->consul_port,
+             siri.cfg->consul_kv_prefix,
+             SIRIDB_USERS_FN
+    );
 
-    if (!xpath_file_exist(fn))
-    {
-        /* we do not have a user access file, lets create the first user */
+    FILE *fp = popen(buffer, "r");
+    if (fp == NULL) {
+        log_error("Failed to execute command to read users: '%s'.", buffer);
+        return -1;
+    }
+
+    snprintf(buffer,
+             PATH_MAX,
+             "%s%s/",
+             siri.cfg->consul_kv_prefix,
+             SIRIDB_USERS_FN
+    );
+    size_t skipchars = strlen(buffer);
+    int rc = 0;
+    bool hasUsers = false;
+    /*Read the output a line at a time*/
+    while (fgets(buffer, sizeof(buffer)-1, fp) != NULL) {
+        user = siridb_user_new();
+        if (user == NULL)
+        {
+            rc = -1;  /* signal is raised */
+        }
+        else
+        {
+            buffer[strcspn(buffer, "\n")] = 0;
+            user->name = strndup(buffer + skipchars, strlen(buffer + skipchars));
+            if(fgets(buffer, sizeof(buffer)-1, fp) == NULL) {
+                log_critical("Unexpected EOF when reading users from consul");
+                siridb_user_decref(user);
+                rc = -1;
+            } else {
+                //Decode base64 encoded data from consul
+                char * password = base64_decode(buffer, PATH_MAX);
+                user->password = strndup(password, strlen(password));
+
+                if(fgets(buffer, sizeof(buffer)-1, fp) == NULL || user->name == NULL || user->password == NULL) {
+                    log_critical("Unexpected EOF when reading users from consul OR error allocating memory");
+                    siridb_user_decref(user);
+                    rc = -1;
+                } else {
+                    user->access_bit = (uint32_t) strtoul(buffer,NULL, 10);
+                    if (llist_append(siridb->users, user)) {
+                        siridb_user_decref(user);
+                        rc = -1;  /* signal is raised */
+                    } else {
+                        log__debug("Added user: %s, pw=%s, acl=%i",user->name, user->password, user->access_bit);
+                        hasUsers = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if(pclose(fp)/256 != 0) {
+        log_error("Command to retrieve users from consul did not return exitcode 0.");
+        return -1;
+    }
+
+    if(rc == 0 && !hasUsers) {
+        /* we do not have any users yet for the database, create a default user */
         user = siridb_user_new();
         if (user == NULL)
         {
@@ -88,52 +149,6 @@ int siridb_users_load(siridb_t * siridb)
 
         return 0;
     }
-
-    if ((unpacker = qp_unpacker_ff(fn)) == NULL)
-    {
-        return -1;  /* a signal is raised is case of a memory error */
-    }
-
-    /* unpacker will be freed in case macro fails */
-    siridb_schema_check(SIRIDB_USERS_SCHEMA)
-
-    int rc = 0;
-    while (qp_is_array(qp_next(unpacker, NULL)) &&
-            qp_next(unpacker, &qp_name) == QP_RAW &&
-            qp_next(unpacker, &qp_password) == QP_RAW &&
-            qp_password.len > 12 &&  /* old and new passwords are > 12 */
-            qp_next(unpacker, &qp_access_bit) == QP_INT64)
-    {
-        user = siridb_user_new();
-        if (user == NULL)
-        {
-            rc = -1;  /* signal is raised */
-        }
-        else
-        {
-            user->name = strndup(qp_name.via.raw, qp_name.len);
-            user->password = strndup(qp_password.via.raw, qp_password.len);
-
-            if (user->name == NULL || user->password == NULL)
-            {
-                ERR_ALLOC
-                siridb_user_decref(user);
-                rc = -1;
-            }
-            else
-            {
-                user->access_bit = (uint32_t) qp_access_bit.via.int64;
-                if (llist_append(siridb->users, user))
-                {
-                    siridb_user_decref(user);
-                    rc = -1;  /* signal is raised */
-                }
-            }
-        }
-    }
-
-    /* free unpacker */
-    qp_unpacker_ff_free(unpacker);
 
     return rc;
 }
@@ -289,28 +304,13 @@ int siridb_users_drop_user(
  */
 int siridb_users_save(siridb_t * siridb)
 {
-    qp_fpacker_t * fpacker;
+    char * buffer[PATH_MAX];
 
-    /* get user access file name */
-    SIRIDB_GET_FN(fn, siridb->dbpath, SIRIDB_USERS_FN)
-
-    if (
-        /* open a new user file */
-        (fpacker = qp_open(fn, "w")) == NULL ||
-
-        /* open a new array */
-        qp_fadd_type(fpacker, QP_ARRAY_OPEN) ||
-
-        /* write the current schema */
-        qp_fadd_int16(fpacker, SIRIDB_USERS_SCHEMA) ||
-
-        /* we can and should skip this if we have no users to save */
-        llist_walk(siridb->users, (llist_cb) USERS_save, fpacker) ||
-
-        /* close file pointer */
-        qp_close(fpacker))
+    /* we can and should skip this if we have no users to save */
+    if (llist_walk(siridb->users, (llist_cb) USERS_save, buffer))
     {
-        ERR_FILE
+        log_critical("Error writing users to consul");
+        raise(SIGABRT);
         return EOF;
     }
 
@@ -320,15 +320,27 @@ int siridb_users_save(siridb_t * siridb)
 /*
  * Returns 0 if successful and -1 in case an error occurred.
  */
-static int USERS_save(siridb_user_t * user, qp_fpacker_t * fpacker)
+static int USERS_save(siridb_user_t * user, char * buffer)
 {
-    int rc = 0;
+    snprintf(buffer, PATH_MAX, "curl -X PUT -d '%s' %s:%i/v1/kv/%s%s/%s?flags=%i",
+             user->password,
+             siri.cfg->consul_address,
+             siri.cfg->consul_port,
+             siri.cfg->consul_kv_prefix,
+             SIRIDB_USERS_FN,
+             user->name,
+             user->access_bit
+    );
 
-    rc += qp_fadd_type(fpacker, QP_ARRAY3);
-    rc += qp_fadd_string(fpacker, user->name);
-    rc += qp_fadd_string(fpacker, user->password);
-    rc += qp_fadd_int32(fpacker, (int32_t) user->access_bit);
-    return rc;
+    FILE *fp = popen(buffer, "r");
+
+    if (fp == NULL || fgets(buffer, sizeof(buffer)-1, fp) == NULL) {
+        log_error("Failed to execute command write user.");
+        return -1;
+    }
+
+    buffer[strcspn(buffer, "\n")] = 0;
+    return strcmp(buffer, "true");
 }
 
 inline static int USERS_cmp(siridb_user_t * user, const char * name)
@@ -341,4 +353,3 @@ static int USERS_free(siridb_user_t * user, void * args)
     siridb_user_decref(user);
     return 0;
 }
-

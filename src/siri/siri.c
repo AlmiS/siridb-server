@@ -215,8 +215,6 @@ void siri_free(void)
 static int SIRI_load_databases(void)
 {
     DIR * db_container_path;
-    struct dirent * dbpath;
-    char buffer[PATH_MAX];
 
     if (!xpath_is_dir(siri.cfg->default_db_path))
     {
@@ -236,45 +234,12 @@ static int SIRI_load_databases(void)
                 siri.cfg->default_db_path);
         return -1;
     }
-    
 
-    while((dbpath = readdir(db_container_path)) != NULL)
+    if (siridb_new(siri.cfg, 0) == NULL)
     {
-        if (    strcmp(dbpath->d_name, ".") == 0 ||
-                strcmp(dbpath->d_name, "..") == 0 ||
-                strncmp(dbpath->d_name, "__", 2) == 0)
-        {
-            /* skip "." ".." and prefixed with double underscore directories */
-            continue;
-        }
-
-        snprintf(buffer,
-                PATH_MAX,
-                "%s%s/",
-                siri.cfg->default_db_path,
-                dbpath->d_name);
-
-        if (!siridb_is_db_path(buffer))
-        {
-            /* this is not a SiriDB database directory, files are missing */
-            continue;
-        }
-
-        if (siri.siridb_list->len == MAX_NUMBER_DB)
-        {
-            log_critical(
-                    "Cannot load '%s' since no more than %d databases "
-                    "are allowed on a single SiriDB process.",
-                    dbpath->d_name,
-                    MAX_NUMBER_DB);
-            continue;
-        }
-
-        if (siridb_new(buffer, 0) == NULL)
-        {
-            log_error("Could not load '%s'.", dbpath->d_name);
-        }
+        log_error("Could not load '%s'.", siri.cfg->default_db_path);
     }
+
     closedir(db_container_path);
 
     return 0;

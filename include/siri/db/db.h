@@ -11,6 +11,7 @@
  */
 #pragma once
 
+#include "siri/cfg/cfg.h"
 #include <siri/err.h>
 #include <siri/db/time.h>
 #include <siri/db/user.h>
@@ -52,6 +53,7 @@
         return -1;                                              \
     }
 
+typedef struct siri_cfg_s siri_cfg_t;
 typedef struct siridb_time_s siridb_time_t;
 typedef struct siridb_server_s siridb_server_t;
 typedef struct siridb_users_s siridb_users_t;
@@ -106,10 +108,8 @@ typedef struct siridb_s
     siridb_groups_t * groups;
 } siridb_t;
 
-int siridb_is_db_path(const char * dbpath);
-siridb_t * siridb_new(const char * dbpath, int lock_flags);
-int siridb_from_unpacker(
-        qp_unpacker_t * unpacker,
+siridb_t * siridb_new(siri_cfg_t * cfg, int lock_flags);
+int siridb_from_consul(
         siridb_t ** siridb,
         char * err_msg);
 

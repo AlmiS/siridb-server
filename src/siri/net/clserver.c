@@ -552,12 +552,13 @@ static void on_loaddb(uv_stream_t * client, sirinet_pkg_t * pkg)
         }
         else
         {
-            siridb_t * siridb = siridb_new(dbpath, LOCK_QUIT_IF_EXIST);
+            // TODO this has not been adapted to the new fact that there is only one db
+            /*siridb_t * siridb = siridb_new(dbpath, LOCK_QUIT_IF_EXIST);
             if (siridb != NULL)
             {
                 siridb->server->flags |= SERVER_FLAG_RUNNING;
 
-                /* Force one heart-beat */
+                *//* Force one heart-beat *//*
                 siri_heartbeat_force();
             }
             sirinet_pkg_t * package = sirinet_pkg_new(
@@ -570,7 +571,7 @@ static void on_loaddb(uv_stream_t * client, sirinet_pkg_t * pkg)
             {
                 sirinet_pkg_send(client, package);
             }
-            free(dbpath);
+            free(dbpath);*/
         }
     }
     else

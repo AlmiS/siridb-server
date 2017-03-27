@@ -1267,5 +1267,3 @@ static void INSERT_free(uv_handle_t * handle)
     free((uv_async_t *) handle);
 
 }
-
-

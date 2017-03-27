@@ -21,13 +21,14 @@
 static siri_cfg_t siri_cfg = {
         .listen_client_port=9000,
         .listen_backend_port=9010,
+        .consul_port=8500,
         .heartbeat_interval=30,
         .max_open_files=DEFAULT_OPEN_FILES_LIMIT,
         .optimize_interval=3600,
         .ip_support=IP_SUPPORT_ALL,
         .server_address="localhost",
         .default_db_path="/var/lib/siridb/",
-        .consul_binary="/usr/local/bin/consul",
+        .consul_address="localhost",
         .consul_kv_prefix="brume-db",
 };
 
@@ -43,9 +44,9 @@ static void SIRI_CFG_read_address_port(
         char * address_pt,
         uint16_t * port_pt);
 static void SIRI_CFG_read_default_db_path(cfgparser_t * cfgparser);
+static void SIRI_CFG_read_buffer_path(cfgparser_t * cfgparser);
 static void SIRI_CFG_read_max_open_files(cfgparser_t * cfgparser);
 static void SIRI_CFG_read_ip_support(cfgparser_t * cfgparser);
-static void SIRI_CFG_read_consul_binary(cfgparser_t * cfgparser);
 static void SIRI_CFG_read_consul_kv_prefix(cfgparser_t * cfgparser);
 
 void siri_cfg_init(siri_t * siri)
@@ -101,13 +102,20 @@ void siri_cfg_init(siri_t * siri)
     siri_cfg.heartbeat_interval = (uint16_t) tmp;
 
     SIRI_CFG_read_default_db_path(cfgparser);
+    SIRI_CFG_read_buffer_path(cfgparser);
     SIRI_CFG_read_max_open_files(cfgparser);
     SIRI_CFG_read_ip_support(cfgparser);
 
     /*Consul settings*/
-    SIRI_CFG_read_consul_binary(cfgparser);
+    SIRI_CFG_read_address_port(
+            cfgparser,
+            "consul_address",
+            siri_cfg.consul_address,
+            &siri_cfg.consul_port);
+
     SIRI_CFG_read_consul_kv_prefix(cfgparser);
 
+    /* free parser */
     cfgparser_free(cfgparser);
 }
 
@@ -277,6 +285,67 @@ static void SIRI_CFG_read_default_db_path(cfgparser_t * cfgparser)
         if (siri_cfg.default_db_path[len - 1] != '/')
         {
             siri_cfg.default_db_path[len] = '/';
+        }
+    }
+}
+
+static void SIRI_CFG_read_buffer_path(cfgparser_t * cfgparser)
+{
+    cfgparser_option_t * option;
+    cfgparser_return_t rc;
+    size_t len;
+    rc = cfgparser_get_option(
+            &option,
+            cfgparser,
+            "siridb",
+            "buffer_path");
+    if (rc != CFGPARSER_SUCCESS)
+    {
+        log_warning(
+                "Could not read %s in %s. %s. Using same location as default_db_path: '%s'",
+                "buffer_path",
+                siri.args->config,
+                cfgparser_errmsg(rc),
+                siri_cfg.default_db_path);
+
+        strcpy(siri_cfg.buffer_path, siri_cfg.default_db_path);
+    }
+    else if (option->tp != CFGPARSER_TP_STRING)
+    {
+        log_warning(
+                "Error reading '%s' in '%s': %s. "
+                        "Using default value same as default_db_path: '%s'",
+                "buffer_path",
+                siri.args->config,
+                "error: expecting a string value",
+                siri_cfg.default_db_path);
+
+        strcpy(siri_cfg.buffer_path, siri_cfg.default_db_path);
+    }
+    else
+    {
+        memset(siri_cfg.buffer_path, 0, PATH_MAX);
+
+        /* keep space left for a trailing slash and a terminator char */
+        strncpy(siri_cfg.buffer_path,
+                option->val->string,
+                PATH_MAX - 2);
+
+        len = strlen(siri_cfg.default_db_path);
+
+        if (len == PATH_MAX - 2)
+        {
+            log_warning(
+                    "Default buffer path exceeds %d characters, please "
+                            "check your configuration file: %s",
+                    PATH_MAX - 3,
+                    siri.args->config);
+        }
+
+        /* add trailing slash (/) if its not already there */
+        if (siri_cfg.buffer_path[len - 1] != '/')
+        {
+            siri_cfg.buffer_path[len] = '/';
         }
     }
 }
@@ -473,46 +542,6 @@ static void SIRI_CFG_read_address_port(
                     *port_pt);
         }
 
-    }
-}
-
-static void SIRI_CFG_read_consul_binary(cfgparser_t * cfgparser)
-{
-    cfgparser_option_t * option;
-    cfgparser_return_t rc;
-
-    rc = cfgparser_get_option(
-            &option,
-            cfgparser,
-            "siridb",
-            "consul_binary");
-    if (rc != CFGPARSER_SUCCESS)
-    {
-        log_warning(
-                "Error reading '%s' in '%s': %s. "
-                        "Using default value: '%s'",
-                "consul_binary",
-                siri.args->config,
-                cfgparser_errmsg(rc),
-                siri_cfg.consul_binary);
-    }
-    else if (option->tp != CFGPARSER_TP_STRING)
-    {
-        log_warning(
-                "Error reading '%s' in '%s': %s. "
-                        "Using default value: '%s'",
-                "consul_binary",
-                siri.args->config,
-                "error: expecting a string value",
-                siri_cfg.consul_binary);
-    }
-    else
-    {
-        memset(siri_cfg.consul_binary, 0, PATH_MAX);
-
-        strncpy(siri_cfg.consul_binary,
-                option->val->string,
-                PATH_MAX);
     }
 }
 

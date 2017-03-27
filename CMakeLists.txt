@@ -6,6 +6,7 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DDEBUG=1 -Wall")
 
 set(SOURCE_FILES
         include/argparse/argparse.h
+        include/base64/base64.h
         include/cexpr/cexpr.h
         include/cfgparser/cfgparser.h
         include/cleri/children.h
@@ -30,6 +31,7 @@ set(SOURCE_FILES
         include/cleri/tokens.h
         include/ctree/ctree.h
         include/expr/expr.h
+        include/hashmap/hashmap.h
         include/imap/imap.h
         include/imap32/imap32.h
         include/iso8601/iso8601.h
@@ -104,6 +106,7 @@ set(SOURCE_FILES
         include/xmath/xmath.h
         include/xpath/xpath.h
         src/argparse/argparse.c
+        src/base64/base64.c
         src/cexpr/cexpr.c
         src/cfgparser/cfgparser.c
         src/cleri/children.c
@@ -128,6 +131,7 @@ set(SOURCE_FILES
         src/cleri/tokens.c
         src/ctree/ctree.c
         src/expr/expr.c
+        src/hashmap/hashmap.c
         src/imap/imap.c
         src/iso8601/iso8601.c
         src/llist/llist.c
@@ -210,3 +214,4 @@ target_link_libraries (${PROJECT_NAME} uuid)
 target_link_libraries (${PROJECT_NAME} m)
 target_link_libraries (${PROJECT_NAME} pcre)
 target_link_libraries (${PROJECT_NAME} crypt)
+target_link_libraries (${PROJECT_NAME} b64)
