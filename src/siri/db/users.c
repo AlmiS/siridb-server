@@ -104,6 +104,7 @@ int siridb_users_load(siridb_t * siridb) {
                 //Decode base64 encoded data from consul
                 char * password = base64_decode(buffer, PATH_MAX);
                 user->password = strndup(password, strlen(password));
+                free(password);
 
                 if(fgets(buffer, sizeof(buffer)-1, fp) == NULL || user->name == NULL || user->password == NULL) {
                     log_critical("Unexpected EOF when reading users from consul OR error allocating memory");
@@ -115,7 +116,6 @@ int siridb_users_load(siridb_t * siridb) {
                         siridb_user_decref(user);
                         rc = -1;  /* signal is raised */
                     } else {
-                        log__debug("Added user: %s, pw=%s, acl=%i",user->name, user->password, user->access_bit);
                         hasUsers = true;
                     }
                 }
@@ -146,6 +146,8 @@ int siridb_users_load(siridb_t * siridb) {
             siridb_user_decref(user);
             return -1;
         }
+
+        log_debug("No users found, so added default user.");
 
         return 0;
     }
@@ -334,7 +336,7 @@ static int USERS_save(siridb_user_t * user, char * buffer)
 
     FILE *fp = popen(buffer, "r");
 
-    if (fp == NULL || fgets(buffer, sizeof(buffer)-1, fp) == NULL) {
+    if (fp == NULL || fgets(buffer, sizeof(buffer)-1, fp) == NULL || pclose(fp) / 256 != 0) {
         log_error("Failed to execute command write user.");
         return -1;
     }

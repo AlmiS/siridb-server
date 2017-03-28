@@ -2,6 +2,7 @@
 // Created by almir on 3/27/17.
 //
 
+/* install: apt-get install libb64-dev */
 #include <b64/cencode.h>
 #include <b64/cdecode.h>
 

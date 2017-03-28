@@ -331,7 +331,7 @@ static void SIRI_CFG_read_buffer_path(cfgparser_t * cfgparser)
                 option->val->string,
                 PATH_MAX - 2);
 
-        len = strlen(siri_cfg.default_db_path);
+        len = strlen(siri_cfg.buffer_path);
 
         if (len == PATH_MAX - 2)
         {

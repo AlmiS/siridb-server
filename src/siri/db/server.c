@@ -58,11 +58,12 @@ static void SERVER_cancel_promise(sirinet_promise_t * promise);
  * In case of an error the return value is NULL and a SIGNAL is raised.
  */
 siridb_server_t * siridb_server_new(
-        const char * uuid,
+        uuid_t uuid,
         const char * address,
         size_t address_len,
         uint16_t port,
-        uint16_t pool)
+        uint16_t pool,
+        uint16_t modify_idx)
 {
     siridb_server_t * server =
             (siridb_server_t *) malloc(sizeof(siridb_server_t));
@@ -88,6 +89,7 @@ siridb_server_t * siridb_server_new(
 
     server->port = port;
     server->pool = pool;
+    server->modify_idx = modify_idx;
     server->flags = 0;
     server->id = 255;
     server->ref = 0;
@@ -236,13 +238,14 @@ int siridb_server_send_pkg(
  * In case of an error NULL is returned.
  * (a SIGNAL might be raised in case of allocation errors)
  */
+// TODO this functionality should probably be removed //
 siridb_server_t * siridb_server_register(
         siridb_t * siridb,
         char * data,
         size_t len)
 {
     siridb_server_t * server = NULL;
-    qp_unpacker_t unpacker;
+/*    qp_unpacker_t unpacker;
     qp_unpacker_init(&unpacker, data, len);
 
     qp_obj_t qp_uuid;
@@ -273,7 +276,7 @@ siridb_server_t * siridb_server_register(
                 server = NULL;
             }
         }
-    }
+    }*/
 
     return server;
 }

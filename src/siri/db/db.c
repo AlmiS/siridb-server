@@ -269,8 +269,7 @@ int siridb_from_consul(
     if (fgets(buffer, PATH_MAX - 1, fp) != NULL) {
         buffer[strcspn(buffer, "\n")] = 0;
         log_debug("UUID from consul: %s ", buffer);
-        char * str_uuid = strndup(buffer, strlen(buffer));
-        if(uuid_parse(str_uuid, (*siridb)->uuid) != 0) {
+        if(uuid_parse(buffer, (*siridb)->uuid) != 0) {
             READ_DB_EXIT_WITH_ERROR("Could not parse own uuid from consul.")
         }
     }
