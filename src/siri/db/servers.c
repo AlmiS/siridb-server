@@ -30,7 +30,7 @@
 #define SIRIDB_SERVERS_SCHEMA 1
 
 static void SERVERS_walk_free(siridb_server_t *server, void *args);
-
+static void SERVERS_walk_free_old(siridb_server_t *server, llist_t *servers_old);
 static int SERVERS_walk_save(siridb_server_t *server, qp_fpacker_t *fpacker);
 
 /*
@@ -39,18 +39,11 @@ static int SERVERS_walk_save(siridb_server_t *server, qp_fpacker_t *fpacker);
  */
 int siridb_servers_load(siridb_t *siridb) {
     char buffer[PATH_MAX];
-    siridb_server_t *server;
 
     log_info("Loading servers");
 
     /* we should not have any servers at this moment */
     assert(siridb->servers == NULL);
-
-    /* create a new server list */
-    siridb->servers = llist_new();
-    if (siridb->servers == NULL) {
-        return -1;  /* signal is raised */
-    }
 
     char uuid_str[37];
     uuid_unparse(siridb->uuid, uuid_str);
@@ -75,13 +68,25 @@ int siridb_servers_load(siridb_t *siridb) {
 
     if (fp == NULL || fgets(buffer, sizeof(buffer)-1, fp) == NULL || pclose(fp) / 256 != 0) {
         log_error("Failed to execute command to put own uuid into consul.");
+        free(fp);
         return -1;
     }
     buffer[strcspn(buffer, "\n")] = 0;
     if(strcmp(buffer, "true")) {
         log_error("Failed to execute command to put own uuid into consul.");
+        free(fp);
         return -1;
     }
+
+    return siridb_servers_refresh(siridb);
+}
+
+// TODO do we need a synchronized lock on this method?
+int siridb_servers_refresh(siridb_t *siridb) {
+    log__info("Refreshing list of servers...");
+
+    char buffer[PATH_MAX];
+    siridb_server_t *server;
 
     /*Execute command to read servers from consul, Key = server-uuid, Value = address, Flag = port*/
     snprintf(buffer,
@@ -93,7 +98,7 @@ int siridb_servers_load(siridb_t *siridb) {
              SIRIDB_SERVERS_FN
     );
 
-    fp = popen(buffer, "r");
+    FILE* fp = popen(buffer, "r");
     if (fp == NULL) {
         log_error("Failed to execute command to read servers: '%s'.", buffer);
         return -1;
@@ -108,15 +113,26 @@ int siridb_servers_load(siridb_t *siridb) {
     size_t skipchars = strlen(buffer);
     int rc = 0;
     uint16_t pool = 0;
+    bool do_force_heartbeat = false;
 
-    while (fgets(buffer, sizeof(buffer) - 1, fp) != NULL) {
+    /* create a new server list */
+    llist_t *servers_new = llist_new();
+
+    if (servers_new  == NULL) {
+        return -1;  /* signal is raised */
+    }
+
+    while (rc == 0 && fgets(buffer, sizeof(buffer) - 1, fp) != NULL) {
 
         /*read uuid */
         uuid_t uuid;
+
         buffer[strcspn(buffer, "\n")] = 0;
         if (uuid_parse(buffer + skipchars, uuid) != 0) {
             log_error("Could not parse uuid of a server from consul '%s'.", buffer);
             pclose(fp);
+            siridb_servers_free(servers_new);
+            /*siridb_pools_free(pools_new);*/
             return -1;
         }
 
@@ -124,6 +140,8 @@ int siridb_servers_load(siridb_t *siridb) {
         if (fgets(buffer, sizeof(buffer) - 1, fp) == NULL) {
             log_error("Unexpected EOF when reading servers from consul. Expecting address");
             pclose(fp);
+            siridb_servers_free(servers_new);
+            /*siridb_pools_free(pools_new);*/
             return -1;
         }
         char *address = base64_decode(buffer, PATH_MAX);
@@ -133,6 +151,9 @@ int siridb_servers_load(siridb_t *siridb) {
             log_critical("Unexpected EOF when reading servers from consul. Expecting port");
             pclose(fp);
             free(address);
+            pclose(fp);
+            siridb_servers_free(servers_new);
+            /*siridb_pools_free(pools_new);*/
             return -1;
         }
         uint16_t port = (uint16_t) strtoul(buffer, NULL, 10);
@@ -141,19 +162,24 @@ int siridb_servers_load(siridb_t *siridb) {
         if (fgets(buffer, sizeof(buffer) - 1, fp) == NULL) {
             log_critical("Unexpected EOF when reading servers from consul. Expecting port");
             pclose(fp);
+            siridb_servers_free(servers_new);
+            /*siridb_pools_free(pools_new);*/
             free(address);
             return -1;
         }
         uint16_t modify_idx = (uint16_t) strtoul(buffer, NULL, 10);
 
-        server = siridb_server_new(
-                uuid,
-                address,
-                strlen(address),
-                port,
-                pool,
-                modify_idx
-        );
+        if(siridb->servers == NULL || (server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL) {
+            server = siridb_server_new(
+                    uuid,
+                    address,
+                    strlen(address),
+                    port,
+                    pool,
+                    modify_idx
+            );
+            do_force_heartbeat = true;
+        }
 
         if (server == NULL) {
             rc = -1;  /* signal is raised */
@@ -161,7 +187,7 @@ int siridb_servers_load(siridb_t *siridb) {
             siridb_server_incref(server);
 
             /* append the server to the list */
-            if (llist_append(siridb->servers, server)) {
+            if (llist_append(servers_new, server)) {
                 siridb_server_decref(server);
                 rc = -1;  /* signal is raised */
             } else if (uuid_compare(server->uuid, siridb->uuid) == 0) {
@@ -174,8 +200,39 @@ int siridb_servers_load(siridb_t *siridb) {
                     rc = -1;  /* signal is raised */
                 }
             }
+
+            if (siridb_server_update_address(
+                    siridb,
+                    server,
+                    address,
+                    port) < 0)
+            {
+                rc = -1;  /* logging is done, set result code to -1 */
+            }
+        }
+
+        if(rc == 0) {
+            server->pool=pool;
         }
         pool++;
+    }
+
+    if(rc == 0) {
+        llist_t *servers_old = siridb->servers;
+        siridb->servers = servers_new;
+
+        if(siridb->pools != NULL) {
+            // This is not the first startup, thus we need to reinitialize the pools
+            // TODO this could probably fail with a null pointer somewhere else in the code?
+            siridb_pools_free(siridb->pools);
+            siridb->pools = NULL;
+            siridb_pools_init(siridb);
+        }
+
+        if(servers_old != NULL) {
+            llist_walk(servers_new, (llist_cb) SERVERS_walk_free_old, servers_old);
+            siridb_servers_free(servers_old);
+        }
     }
 
     if (fgets(buffer, sizeof(buffer) - 1, fp) != NULL)
@@ -193,13 +250,9 @@ int siridb_servers_load(siridb_t *siridb) {
         log_critical("Could not find my own uuid in data from consul");
         rc = -1;
     }
-    else if (siridb_server_update_address(
-            siridb,
-            siridb->server,
-            siri.cfg->server_address,
-            siri.cfg->listen_backend_port) < 0)
-    {
-        rc = -1;  /* logging is done, set result code to -1 */
+
+    if(do_force_heartbeat) {
+        siri_heartbeat_force();
     }
 
     return rc;
@@ -677,6 +730,12 @@ int siridb_servers_save(siridb_t *siridb) {
 
 static void SERVERS_walk_free(siridb_server_t *server, void *args) {
     siridb_server_decref(server);
+}
+
+static void SERVERS_walk_free_old(siridb_server_t *server, llist_t *servers_old) {
+    if(llist_remove(servers_old, NULL, server) != NULL) {
+        siridb_server_decref(server);
+    }
 }
 
 static int SERVERS_walk_save(siridb_server_t *server, qp_fpacker_t *fpacker) {

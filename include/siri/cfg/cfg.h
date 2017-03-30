@@ -3,6 +3,7 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <siri/siri.h>
+#include "uuid/uuid.h"
 
 typedef struct siri_s siri_t;
 
@@ -18,6 +19,7 @@ typedef struct siri_cfg_s
     uint32_t optimize_interval;
     uint8_t ip_support;
     char server_address[SIRI_CFG_MAX_LEN_ADDRESS];
+    uuid_t server_uuid;
     char default_db_path[PATH_MAX];
     char buffer_path[PATH_MAX];
     char consul_address[SIRI_CFG_MAX_LEN_ADDRESS];

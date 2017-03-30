@@ -238,12 +238,11 @@ siridb_t * siridb_new(siri_cfg_t *cfg, int lock_flags)
  * (a SIGNAL can be set in case of an error)
  */
 
+//TODO currently all values are just hardcoded
 int siridb_from_consul(
         siridb_t ** siridb,
         char * err_msg)
 {
-    char buffer[PATH_MAX];
-
     /* create a new SiriDB structure */
     *siridb = SIRIDB_new();
     if (*siridb == NULL)
@@ -252,31 +251,8 @@ int siridb_from_consul(
         return -1;
     }
 
-    /* read uuid */
-    FILE * fp;
-    snprintf(buffer,
-             PATH_MAX,
-             "curl -s %s:%i/v1/agent/self | jq .Config.NodeID -r",
-             siri.cfg->consul_address,
-             siri.cfg->consul_port);
-
-    fp = popen(buffer, "r");
-    if (fp == NULL) {
-        READ_DB_EXIT_WITH_ERROR("cannot execute command to read own uuid from consul.")
-    }
-
-    /* Read one line from the output and verify its the uuid */
-    if (fgets(buffer, PATH_MAX - 1, fp) != NULL) {
-        buffer[strcspn(buffer, "\n")] = 0;
-        log_debug("UUID from consul: %s ", buffer);
-        if(uuid_parse(buffer, (*siridb)->uuid) != 0) {
-            READ_DB_EXIT_WITH_ERROR("Could not parse own uuid from consul.")
-        }
-    }
-    /* If we received multiple lines from the command or exit code is not 0 something went wrong */
-    if (fgets(buffer, PATH_MAX - 1, fp) != NULL || pclose(fp)/256 != 0) {
-        READ_DB_EXIT_WITH_ERROR("unexpected input received when trying to read own uuid from consul")
-    }
+    // Set uuid same as servers
+    uuid_copy((*siridb)->uuid, siri.cfg->server_uuid);
 
     /*Create database name*/
     (*siridb)->dbname = "brume";

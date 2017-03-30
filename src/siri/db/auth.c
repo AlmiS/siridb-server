@@ -98,14 +98,23 @@ bproto_server_t siridb_auth_server_request(
         return BPROTO_AUTH_ERR_UNKNOWN_DBNAME;
     }
 
-    if (    (server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL ||
-            server == siridb->server)
+    if (server == siridb->server)
     {
         /*
          * Respond with unknown uuid when not found or in case its 'this'
          * server.
          */
         return BPROTO_AUTH_ERR_UNKNOWN_UUID;
+    }
+
+    if((server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL) {
+        // Check consul to see if this server exists but we did not know about it is new
+        // eg. call refresh servers
+        siridb_servers_refresh(siridb);
+
+        if((server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL) {
+            return BPROTO_AUTH_ERR_UNKNOWN_UUID;
+        }
     }
 
     ((sirinet_socket_t *) client->data)->siridb = siridb;
