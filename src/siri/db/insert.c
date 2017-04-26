@@ -1022,16 +1022,18 @@ static void INSERT_points_to_pools(uv_async_t * handle)
  */
 static uint16_t INSERT_get_pool(siridb_t * siridb, qp_obj_t * qp_series_name)
 {
-/*    uint16_t pool;
+    uint16_t pool;
 
-    *//* select the correct pool *//*
+    /* select the correct pool */
     pool = siridb_lookup_sn_raw(
-            siridb->pools->lookup,
+            siridb->servers,
             qp_series_name->via.raw,
-            qp_series_name->len);*/
+            siridb->server->pool,
+            qp_series_name->len
+    );
 
     // Insertions are always performed to the current pool
-    return siridb->server->pool;
+    return pool;
 }
 
 /*

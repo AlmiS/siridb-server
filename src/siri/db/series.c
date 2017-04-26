@@ -282,6 +282,37 @@ siridb_series_t * siridb_series_new(
 
     if (series != NULL)
     {
+        /* add series to consul */
+        char buffer[PATH_MAX];
+
+        char uuid_str[37];
+        uuid_unparse(siridb->uuid, uuid_str);
+
+        if(strlen(uuid_str) != 36) {
+            log_error("Error unparsing own uuid: '%s' to string", siridb->uuid);
+            return -1;
+        }
+
+        snprintf(buffer,
+                 PATH_MAX,
+                 "curl -s -X PUT -d '%s' %s:%i/v1/kv/%s%s/%s",
+                 uuid_str,
+                 siri.cfg->consul_address,
+                 siri.cfg->consul_port,
+                 siri.cfg->consul_kv_prefix,
+                 "series.dat",
+                 series_name
+        );
+        FILE *fp = popen(buffer, "r");
+
+        if (fp == NULL || fgets(buffer, sizeof(buffer)-1, fp) == NULL || pclose(fp) / 256 != 0) {
+            log_error("Failed to execute command to put series into consul.");
+            free(fp);
+            siridb__series_free(series);
+            series = NULL;
+            return NULL;
+        }
+
         /* add series to the store */
         if (
                 qp_fadd_type(siridb->store, QP_ARRAY3) ||
@@ -295,6 +326,7 @@ siridb_series_t * siridb_series_new(
             siridb__series_free(series);
             series = NULL;
         }
+
         /* create a buffer for series (except string series) */
         else if (
                 tp != TP_STRING &&
