@@ -38,13 +38,15 @@ uint16_t siridb_lookup_sn_raw(
         )
 {
     char buffer[PATH_MAX];
-
-    char serie_name[sizeof(sn)];
-    strcpy(serie_name, sn);
-
-    if(len != 0) {
-        serie_name[len] = 0;
+    if(len == 0) {
+        len = strlen(sn);
     }
+    char serie_name[len+1];
+    snprintf(serie_name,
+             len+1,
+             "%s",
+             sn
+    );
 
     /*Execute command to read servers from consul, Key = server-uuid, Value = address, Flag = port*/
     snprintf(buffer,
@@ -57,7 +59,10 @@ uint16_t siridb_lookup_sn_raw(
              serie_name
     );
 
-    log_info(buffer);
+    log_debug("Series name: %s",serie_name);
+    log_debug("Series len: %i", len);
+    log_debug("Series original name: ", sn);
+    log_debug("Buffer: %s", buffer);
 
     FILE* fp = popen(buffer, "r");
     if (fp == NULL) {
