@@ -14,6 +14,7 @@
 #include <procinfo/procinfo.h>
 #include <siri/db/initsync.h>
 #include <siri/db/props.h>
+#include <siri/db/reindex.h>
 #include <siri/db/time.h>
 #include <siri/grammar/grammar.h>
 #include <siri/siri.h>
@@ -93,6 +94,10 @@ static void prop_pool(
         qp_packer_t * packer,
         int map);
 static void prop_received_points(
+        siridb_t * siridb,
+        qp_packer_t * packer,
+        int map);
+static void prop_reindex_progress(
         siridb_t * siridb,
         qp_packer_t * packer,
         int map);
@@ -176,6 +181,8 @@ void siridb_init_props(void)
             prop_pool;
     siridb_props[CLERI_GID_K_RECEIVED_POINTS - KW_OFFSET] =
             prop_received_points;
+    siridb_props[CLERI_GID_K_REINDEX_PROGRESS - KW_OFFSET] =
+            prop_reindex_progress;
     siridb_props[CLERI_GID_K_SERVER - KW_OFFSET] =
             prop_server;
     siridb_props[CLERI_GID_K_STARTUP_TIME - KW_OFFSET] =
@@ -342,6 +349,14 @@ static void prop_received_points(
     qp_add_int64(packer, (int64_t) siridb->received_points);
 }
 
+static void prop_reindex_progress(
+        siridb_t * siridb,
+        qp_packer_t * packer,
+        int map)
+{
+    SIRIDB_PROP_MAP("reindex_progress", 16)
+    qp_add_string(packer, siridb_reindex_progress(siridb));
+}
 
 static void prop_server(
         siridb_t * siridb,

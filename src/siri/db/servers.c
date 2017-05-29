@@ -86,19 +86,46 @@ int siridb_servers_refresh(siridb_t *siridb) {
     log__info("Refreshing list of servers...");
 
     char buffer[PATH_MAX];
-    siridb_server_t *server;
+
+    llist_t *alive_uuid_list = llist_new();
+
+    // Find uuids of alive nodes
+    snprintf(buffer,
+             PATH_MAX,
+             "curl -s -X GET %s:%i/v1/agent/members | jq '.[] | select(.Status==1) | .Tags.id' -r",
+             siri.cfg->consul_address,
+             siri.cfg->consul_port
+    );
+    FILE* fp = popen(buffer, "r");
+    if (fp == NULL) {
+        log_error("Failed to execute command to read healthchecks from consul agent: '%s'.", buffer);
+    } else {
+        while (fgets(buffer, sizeof(buffer) - 1, fp) != NULL) {
+            uuid_t uuid;
+            buffer[strcspn(buffer, "\n")] = 0;
+            if (uuid_parse(buffer, uuid) == 0) {
+                llist_append(alive_uuid_list,uuid);
+            }
+            else {
+                log_error("Could not parse uuid of a server from consul '%s'.", buffer);
+            }
+        }
+    }
+
+    pclose(fp);
 
     /*Execute command to read servers from consul, Key = server-uuid, Value = address, Flag = port*/
     snprintf(buffer,
              PATH_MAX,
-             "curl -s %s:%i/v1/kv/%s%s/?recurse | jq '.[] | .Key, .Value, .Flags, .ModifyIndex' -r",
+             "curl -s %s:%i/v1/kv/%s%s/?recurse | jq 'sort_by(.CreateIndex) | .[] | .Key, .Value, .Flags, .ModifyIndex' -r",
              siri.cfg->consul_address,
              siri.cfg->consul_port,
              siri.cfg->consul_kv_prefix,
              SIRIDB_SERVERS_FN
     );
 
-    FILE* fp = popen(buffer, "r");
+    fp = popen(buffer, "r");
+
     if (fp == NULL) {
         log_error("Failed to execute command to read servers: '%s'.", buffer);
         return -1;
@@ -110,12 +137,15 @@ int siridb_servers_refresh(siridb_t *siridb) {
              siri.cfg->consul_kv_prefix,
              SIRIDB_SERVERS_FN
     );
+
     size_t skipchars = strlen(buffer);
     int rc = 0;
     uint16_t pool = 0;
     bool do_force_heartbeat = false;
 
     /* create a new server list */
+    siridb_server_t *server;
+    llist_node_t *alive_uuid_node;
     llist_t *servers_new = llist_new();
 
     if (servers_new  == NULL) {
@@ -134,6 +164,22 @@ int siridb_servers_refresh(siridb_t *siridb) {
             siridb_servers_free(servers_new);
             /*siridb_pools_free(pools_new);*/
             return -1;
+        }
+
+        //Check if uuid is alive
+        alive_uuid_node = alive_uuid_list->first;
+        bool alive = false;
+        while (alive_uuid_node != NULL)
+        {
+            if(uuid_compare(uuid, alive_uuid_node->data) == 0) {
+                alive = true;
+                break;
+            }
+            alive_uuid_node = alive_uuid_node->next;
+        }
+        if(!alive) {
+            continue;
+            log_debug("Skipped adding failed server: %s", buffer);
         }
 
         /*read address*/
@@ -216,6 +262,8 @@ int siridb_servers_refresh(siridb_t *siridb) {
         }
         pool++;
     }
+
+    free(alive_uuid_list);
 
     if(rc == 0) {
         llist_t *servers_old = siridb->servers;
@@ -357,6 +405,10 @@ int siridb_servers_register(siridb_t *siridb, siridb_server_t *server) {
                     server->name);
             return -1;
         }
+
+        /* this is a new server for a new pool */
+        //TODO Do reindexing properly
+        //siridb->reindex = siridb_reindex_open(siridb, 1);
     }
 
     if (llist_append(siridb->servers, server) || siridb_servers_save(siridb)) {
@@ -372,6 +424,10 @@ int siridb_servers_register(siridb_t *siridb, siridb_server_t *server) {
      */
     siri_heartbeat_force();
 
+    if (siridb->reindex != NULL)
+    {
+        siridb_reindex_start(siridb->reindex->timer);
+    }
 
     return 0;
 
@@ -649,37 +705,40 @@ int siridb_servers_list(siridb_server_t *server, uv_async_t *handle) {
 #ifdef DEBUG
                 assert (siridb->server == server);
 #endif
-                qp_add_int32(
-                        query->packer,
-                        (int32_t) siri.loop->active_handles);
-                break;
-            case CLERI_GID_K_LOG_LEVEL:
-                qp_add_string(query->packer, Logger.level_name);
-                break;
-            case CLERI_GID_K_MAX_OPEN_FILES:
-                qp_add_int32(
-                        query->packer,
-                        (int32_t) siri.cfg->max_open_files);
-                break;
-            case CLERI_GID_K_MEM_USAGE:
-                qp_add_int32(
-                        query->packer,
-                        (int32_t) (procinfo_total_physical_memory() / 1024));
-                break;
-            case CLERI_GID_K_OPEN_FILES:
-                qp_add_int32(query->packer, siridb_open_files(siridb));
-                break;
-            case CLERI_GID_K_RECEIVED_POINTS:
-                qp_add_int64(query->packer, siridb->received_points);
-                break;
-            case CLERI_GID_K_SYNC_PROGRESS:
-                qp_add_string(query->packer, siridb_initsync_sync_progress(siridb));
-                break;
-            case CLERI_GID_K_UPTIME:
-                qp_add_int32(
-                        query->packer,
-                        (int32_t) (time(NULL) - siridb->start_ts));
-                break;
+            qp_add_int32(
+                    query->packer,
+                    (int32_t) siri.loop->active_handles);
+            break;
+        case CLERI_GID_K_LOG_LEVEL:
+            qp_add_string(query->packer, Logger.level_name);
+            break;
+        case CLERI_GID_K_MAX_OPEN_FILES:
+            qp_add_int32(
+                    query->packer,
+                    (int32_t) siri.cfg->max_open_files);
+            break;
+        case CLERI_GID_K_MEM_USAGE:
+            qp_add_int32(
+                    query->packer,
+                    (int32_t) (procinfo_total_physical_memory() / 1024));
+            break;
+        case CLERI_GID_K_OPEN_FILES:
+            qp_add_int32(query->packer, siridb_open_files(siridb));
+            break;
+        case CLERI_GID_K_RECEIVED_POINTS:
+            qp_add_int64(query->packer, siridb->received_points);
+            break;
+        case CLERI_GID_K_REINDEX_PROGRESS:
+            qp_add_string(query->packer, siridb_reindex_progress(siridb));
+            break;
+        case CLERI_GID_K_SYNC_PROGRESS:
+            qp_add_string(query->packer, siridb_initsync_sync_progress(siridb));
+            break;
+        case CLERI_GID_K_UPTIME:
+            qp_add_int32(
+                    query->packer,
+                    (int32_t) (time(NULL) - siridb->start_ts));
+            break;
         }
     }
 

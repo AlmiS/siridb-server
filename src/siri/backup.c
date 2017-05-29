@@ -59,6 +59,7 @@ int siri_backup_enable(siri_t * siri, siridb_t * siridb)
 {
 #ifdef DEBUG
     assert (~siridb->server->flags & SERVER_FLAG_BACKUP_MODE);
+    assert (~siridb->server->flags & SERVER_FLAG_REINDEXING);
 #endif
 
     llist_t * llist = (llist_t *) siri->backup->data;

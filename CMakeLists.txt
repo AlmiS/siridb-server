@@ -51,6 +51,7 @@ set(SOURCE_FILES
         include/siri/db/db.h
         include/siri/db/ffile.h
         include/siri/db/fifo.h
+        include/siri/db/forward.h
         include/siri/db/group.h
         include/siri/db/groups.h
         include/siri/db/initsync.h
@@ -67,6 +68,7 @@ set(SOURCE_FILES
         include/siri/db/props.h
         include/siri/db/query.h
         include/siri/db/re.h
+        include/siri/db/reindex.h
         include/siri/db/replicate.h
         include/siri/db/series.h
         include/siri/db/server.h
@@ -150,6 +152,7 @@ set(SOURCE_FILES
         src/siri/db/db.c
         src/siri/db/ffile.c
         src/siri/db/fifo.c
+        src/siri/db/forward.c
         src/siri/db/group.c
         src/siri/db/groups.c
         src/siri/db/initsync.c
@@ -166,6 +169,7 @@ set(SOURCE_FILES
         src/siri/db/props.c
         src/siri/db/query.c
         src/siri/db/re.c
+        src/siri/db/reindex.c
         src/siri/db/replicate.c
         src/siri/db/series.c
         src/siri/db/server.c

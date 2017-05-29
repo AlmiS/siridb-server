@@ -295,7 +295,7 @@ siridb_series_t * siridb_series_new(
 
         snprintf(buffer,
                  PATH_MAX,
-                 "curl -s -X PUT -d '%s' %s:%i/v1/kv/%s%s/%s",
+                 "curl -s -X PUT -d '%s' %s:%i/v1/kv/%s%s/%s?cas=0",
                  uuid_str,
                  siri.cfg->consul_address,
                  siri.cfg->consul_port,
@@ -307,7 +307,6 @@ siridb_series_t * siridb_series_new(
 
         if (fp == NULL || fgets(buffer, sizeof(buffer)-1, fp) == NULL || pclose(fp) / 256 != 0) {
             log_error("Failed to execute command to put series into consul.");
-            free(fp);
             siridb__series_free(series);
             series = NULL;
             return NULL;

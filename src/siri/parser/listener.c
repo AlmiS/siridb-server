@@ -90,6 +90,16 @@ if (IS_MASTER && !siridb_pools_accessible(siridb))                          \
     return;                                                                 \
 }
 
+#define MASTER_CHECK_REINDEXING(siridb)                                     \
+if (IS_MASTER && siridb_is_reindexing(siridb))                              \
+{                                                                           \
+   sprintf(query->err_msg,                                                  \
+           "SiriDB cannot perform this request because the database is "    \
+           "currently re-indexing");                                        \
+    siridb_query_send_error(handle, CPROTO_ERR_POOL);                       \
+    return;                                                                 \
+}
+
 #define ON_PROMISES                                             \
     siri_async_decref(&handle);                                 \
     if (promises == NULL)                                       \
@@ -956,7 +966,7 @@ static void enter_select_stmt(uv_async_t * handle)
 
     /* this is not critical since pmap is allowed to be NULL */
     ((query_select_t *) query->data)->pmap =
-            (!IS_MASTER) ?
+            (!IS_MASTER || siridb_is_reindexing(siridb)) ?
                     NULL : imap_new();
 
     query->free_cb = (uv_close_cb) query_select_free;
@@ -1088,34 +1098,40 @@ static void enter_series_name(uv_async_t * handle)
     /* extract series name */
     strx_extract_string(series_name, node->str, node->len);
 
-    /* get pool for series name */
-    pool = siridb_lookup_sn(siridb->servers, series_name, siridb->server->pool);
-
-    /* check if this series belongs to 'this' pool and if so get the series */
-    if (pool == siridb->server->pool)
+    if (siridb_is_reindexing(siridb))
     {
-        series = (siridb_series_t *) ct_get(
-                            siridb->series,
-                            series_name);
-        if (series == NULL)
-        {
-            /* the series does not exist */
-            snprintf(query->err_msg, SIRIDB_MAX_SIZE_ERR_MSG,
-                    "Cannot find series: '%s'", series_name);
+        series = ct_get(siridb->series, series_name);
+    }
+    else
+    {
+        /* get pool for series name */
+        pool = siridb_lookup_sn(siridb->servers, series_name, siridb->server->pool);
 
-            /* free series_name and return with send_errror.. */
-            siridb_query_send_error(handle, CPROTO_ERR_QUERY);
-            return;
+        /* check if this series belongs to 'this' pool and if so get the series */
+        if (pool == siridb->server->pool)
+        {
+            series = (siridb_series_t *) ct_get(
+                                siridb->series,
+                                series_name);
+            if (series == NULL)
+            {
+                /* the series does not exist */
+                snprintf(query->err_msg, SIRIDB_MAX_SIZE_ERR_MSG,
+                        "Cannot find series: '%s'", series_name);
+
+                /* free series_name and return with send_errror.. */
+                siridb_query_send_error(handle, CPROTO_ERR_QUERY);
+                return;
+            }
+        }
+        else if (q_wrapper->pmap != NULL && imap_add(
+                q_wrapper->pmap,
+                pool,
+                (siridb_pool_t *) (siridb->pools->pool + pool)) < 0)
+        {
+            log_critical("Cannot add pool to pool map.");
         }
     }
-    else if (q_wrapper->pmap != NULL && imap_add(
-            q_wrapper->pmap,
-            pool,
-            (siridb_pool_t *) (siridb->pools->pool + pool)) < 0)
-    {
-        log_critical("Cannot add pool to pool map.");
-    }
-
 
     if (series == NULL)
     {
@@ -2272,6 +2288,7 @@ static void exit_drop_server(uv_async_t * handle)
             query->nodes->node->children->next->node->children->node,
             query->err_msg);
 
+    MASTER_CHECK_REINDEXING(siridb)
     MASTER_CHECK_ONLINE(siridb)
 
     if (server == NULL)

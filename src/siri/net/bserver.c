@@ -159,6 +159,14 @@ static void BSERVER_flags_update(
         siridb_server_connect(siridb, server);
     }
 
+    /* if server is re-indexing, update status */
+    if (    (siridb->flags & SIRIDB_FLAG_REINDEXING) &&
+            (~siridb->server->flags & SERVER_FLAG_REINDEXING) &&
+            (~server->flags & SERVER_FLAG_REINDEXING))
+    {
+        siridb_reindex_status_update(siridb);
+    }
+
     /* if this is the replica see if we have anything to update */
     if (    siridb->replica == server &&
             siridb_replicate_is_idle(siridb->replicate))
@@ -411,6 +419,12 @@ static void on_repl_finished(uv_stream_t * client, sirinet_pkg_t * pkg)
         /* continue optimize */
         siri_optimize_continue();
 
+        /* start re-index task if needed */
+        if (siridb->reindex != NULL)
+        {
+            siridb_reindex_start(siridb->reindex->timer);
+        }
+
         siridb_servers_send_flags(siridb->servers);
     }
 
@@ -532,7 +546,8 @@ static void on_register_server(uv_stream_t * client, sirinet_pkg_t * pkg)
     siridb_t * siridb = ((sirinet_socket_t * ) client->data)->siridb;
     siridb_server_t * new_server;
 
-    if (    siridb->server->flags != SERVER_FLAG_RUNNING)
+    if (    siridb->server->flags != SERVER_FLAG_RUNNING ||
+            (siridb->flags & SIRIDB_FLAG_REINDEXING))
     {
         log_error("Cannot register new server because of having status %d",
                 siridb->server->flags);
@@ -655,6 +670,7 @@ static void on_enable_backup_mode(uv_stream_t * client, sirinet_pkg_t * pkg)
     sirinet_pkg_t * package;
 
     if (    (~siridb->server->flags & SERVER_FLAG_RUNNING) ||
+            (siridb->flags & SIRIDB_FLAG_REINDEXING) ||
             (siridb->server->flags & SERVER_FLAG_BACKUP_MODE))
     {
         log_error(
@@ -695,6 +711,7 @@ static void on_disable_backup_mode(uv_stream_t * client, sirinet_pkg_t * pkg)
     sirinet_pkg_t * package = NULL;
 
     if (    (~siridb->server->flags & SERVER_FLAG_RUNNING) ||
+            (siridb->flags & SIRIDB_FLAG_REINDEXING) ||
             (~siridb->server->flags & SERVER_FLAG_BACKUP_MODE))
     {
         log_error(

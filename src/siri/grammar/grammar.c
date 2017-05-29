@@ -114,6 +114,7 @@ cleri_grammar_t * compile_grammar(void)
     cleri_object_t * k_pvariance = cleri_keyword(CLERI_GID_K_PVARIANCE, "pvariance", CLERI_CASE_SENSITIVE);
     cleri_object_t * k_read = cleri_keyword(CLERI_GID_K_READ, "read", CLERI_CASE_SENSITIVE);
     cleri_object_t * k_received_points = cleri_keyword(CLERI_GID_K_RECEIVED_POINTS, "received_points", CLERI_CASE_SENSITIVE);
+    cleri_object_t * k_reindex_progress = cleri_keyword(CLERI_GID_K_REINDEX_PROGRESS, "reindex_progress", CLERI_CASE_SENSITIVE);
     cleri_object_t * k_revoke = cleri_keyword(CLERI_GID_K_REVOKE, "revoke", CLERI_CASE_SENSITIVE);
     cleri_object_t * k_select = cleri_keyword(CLERI_GID_K_SELECT, "select", CLERI_CASE_SENSITIVE);
     cleri_object_t * k_series = cleri_keyword(CLERI_GID_K_SERIES, "series", CLERI_CASE_SENSITIVE);
@@ -280,7 +281,7 @@ cleri_grammar_t * compile_grammar(void)
     cleri_object_t * server_columns = cleri_list(CLERI_GID_SERVER_COLUMNS, cleri_choice(
         CLERI_NONE,
         CLERI_FIRST_MATCH,
-        22,
+        23,
         k_address,
         k_buffer_path,
         k_buffer_size,
@@ -301,6 +302,7 @@ cleri_grammar_t * compile_grammar(void)
         k_mem_usage,
         k_open_files,
         k_received_points,
+        k_reindex_progress,
         k_sync_progress,
         k_uptime
     ), cleri_token(CLERI_NONE, ","), 1, 0, 0);
@@ -529,7 +531,7 @@ cleri_grammar_t * compile_grammar(void)
                 cleri_choice(
                     CLERI_NONE,
                     CLERI_FIRST_MATCH,
-                    10,
+                    11,
                     k_address,
                     k_buffer_path,
                     k_dbpath,
@@ -539,6 +541,7 @@ cleri_grammar_t * compile_grammar(void)
                     k_uuid,
                     k_version,
                     k_status,
+                    k_reindex_progress,
                     k_sync_progress
                 ),
                 str_operator,
@@ -1381,7 +1384,7 @@ cleri_grammar_t * compile_grammar(void)
         cleri_list(CLERI_NONE, cleri_choice(
             CLERI_NONE,
             CLERI_FIRST_MATCH,
-            26,
+            27,
             k_active_handles,
             k_buffer_path,
             k_buffer_size,
@@ -1398,6 +1401,7 @@ cleri_grammar_t * compile_grammar(void)
             k_open_files,
             k_pool,
             k_received_points,
+            k_reindex_progress,
             k_server,
             k_startup_time,
             k_status,

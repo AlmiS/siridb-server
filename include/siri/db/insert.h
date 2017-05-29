@@ -13,6 +13,7 @@
 
 #include <siri/db/db.h>
 #include <qpack/qpack.h>
+#include <siri/db/forward.h>
 #include <uv.h>
 #include <siri/db/pcache.h>
 

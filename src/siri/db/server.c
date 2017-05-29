@@ -768,6 +768,9 @@ char * siridb_server_str_status(siridb_server_t * server)
             case SERVER_FLAG_SYNCHRONIZING:
                 strcat(buffer, (!n) ? "synchronizing" : " | " "synchronizing");
                 break;
+            case SERVER_FLAG_REINDEXING:
+                strcat(buffer, (!n) ? "re-indexing" : " | " "re-indexing");
+                break;
             }
             n = 1;
         }
@@ -1104,6 +1107,12 @@ int siridb_server_cexpr_cb(
                 cond->operator,
                 (int64_t) siri.loop->active_handles,
                 cond->int64);
+
+    case CLERI_GID_K_REINDEX_PROGRESS:
+        return cexpr_str_cmp(
+                cond->operator,
+                siridb_reindex_progress(wserver->siridb),
+                cond->str);
 
     case CLERI_GID_K_SYNC_PROGRESS:
         return cexpr_str_cmp(
