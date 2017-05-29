@@ -110,8 +110,7 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
 
             snprintf(buffer,
                      PATH_MAX,
-                     //"! (diff %sbrumedb-series.json /etc/consul.d/services/brumedb-series.json) && (cp %sbrumedb-series.json /etc/consul.d/services/brumedb-series.json; consul reload)",
-                     "! (diff %sbrumedb-series.json /home/almir/Desktop/brumedb-series.json) && (cp -f %sbrumedb-series.json /home/almir/Desktop/brumedb-series.json; consul reload)",
+                     "! (diff %sbrumedb-series.json /etc/consul.d/services/brumedb-series.json) && (cp -f %sbrumedb-series.json /etc/consul.d/services/brumedb-series.json; consul reload)",
                      siridb->dbpath,
                      siridb->dbpath
             );
