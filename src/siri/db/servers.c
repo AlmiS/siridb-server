@@ -104,6 +104,7 @@ int siridb_servers_refresh(siridb_t *siridb) {
             uuid_t uuid;
             buffer[strcspn(buffer, "\n")] = 0;
             if (uuid_parse(buffer, uuid) == 0) {
+                log_debug("Appending uuid %s", buffer);
                 llist_append(alive_uuid_list,uuid);
             }
             else {
@@ -113,6 +114,8 @@ int siridb_servers_refresh(siridb_t *siridb) {
     }
 
     pclose(fp);
+
+    log_debug("Alive nodes %i", alive_uuid_list->len);
 
     /*Execute command to read servers from consul, Key = server-uuid, Value = address, Flag = port*/
     snprintf(buffer,
@@ -211,8 +214,8 @@ int siridb_servers_refresh(siridb_t *siridb) {
             alive_uuid_node = alive_uuid_node->next;
         }
         if(!alive) {
-            continue;
             log_debug("Skipped adding failed server: %s", address);
+            continue;
         }
 
         if(siridb->servers == NULL || (server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL) {
