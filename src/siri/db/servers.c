@@ -107,7 +107,7 @@ int siridb_servers_refresh(siridb_t *siridb) {
                 llist_append(alive_uuid_list,uuid);
             }
             else {
-                log_error("Could not parse uuid of a server from consul '%s'.", buffer);
+                log_error("Could not parse uuid of a server during health-checking: '%s'.", buffer);
             }
         }
     }
