@@ -211,7 +211,9 @@ int siridb_servers_refresh(siridb_t *siridb) {
         bool alive = false;
         while (alive_uuid_node != NULL)
         {
+            log_debug("Searching alive nodes uuid1: %s uuid2: %s", uuid, alive_uuid_node->data);
             if(uuid_compare(uuid, alive_uuid_node->data) == 0) {
+                log_debug("uuid matched");
                 alive = true;
                 break;
             }
