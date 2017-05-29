@@ -29,6 +29,7 @@
 #define SIRIDB_SERVERS_FN "servers.dat"
 #define SIRIDB_SERVERS_SCHEMA 1
 
+static void ALIVE_UUIDS_walk_free(char *uuid, void *args);
 static void SERVERS_walk_free(siridb_server_t *server, void *args);
 static void SERVERS_walk_free_old(siridb_server_t *server, llist_t *servers_old);
 static int SERVERS_walk_save(siridb_server_t *server, qp_fpacker_t *fpacker);
@@ -86,7 +87,6 @@ int siridb_servers_refresh(siridb_t *siridb) {
     log__info("Refreshing list of servers...");
 
     char buffer[PATH_MAX];
-
     llist_t *alive_uuid_list = llist_new();
 
     // Find uuids of alive nodes
@@ -104,13 +104,12 @@ int siridb_servers_refresh(siridb_t *siridb) {
         log_error("Failed to execute command to read healthchecks from consul agent: '%s'.", buffer);
     } else {
         while (fgets(buffer, sizeof(buffer) - 1, fp) != NULL) {
-            uuid_t uuid;
             buffer[strcspn(buffer, "\n")] = 0;
-            log_debug("Alive uuid: ", buffer);
-            if (uuid_parse(buffer, uuid) == 0) {
-                log_debug("Appending uuid %s", buffer);
-                llist_append(alive_uuid_list,uuid);
-            }
+            char *uuid_str = malloc( sizeof(char) * ( 37 ) );
+            strncpy(uuid_str, buffer, 37);
+            llist_append(alive_uuid_list, uuid_str);
+            log_debug("Appending uuid %s", uuid_str);
+
             else {
                 log_error("Could not parse uuid of a server during health-checking: '%s'.", buffer);
             }
@@ -152,7 +151,6 @@ int siridb_servers_refresh(siridb_t *siridb) {
 
     /* create a new server list */
     siridb_server_t *server;
-    llist_node_t *alive_uuid_node;
     llist_t *servers_new = llist_new();
 
     if (servers_new  == NULL) {
@@ -207,12 +205,14 @@ int siridb_servers_refresh(siridb_t *siridb) {
         uint16_t modify_idx = (uint16_t) strtoul(buffer, NULL, 10);
 
         //Check if uuid is alive
-        alive_uuid_node = alive_uuid_list->first;
+        llist_node_t *alive_uuid_node = alive_uuid_list->first;
         bool alive = false;
         while (alive_uuid_node != NULL)
         {
-            log_debug("Searching alive nodes uuid1: %s uuid2: %s", uuid, alive_uuid_node->data);
-            if(uuid_compare(uuid, alive_uuid_node->data) == 0) {
+            char uuid_str[37];
+            uuid_unparse(uuid,uuid_str);
+            log_debug("Searching alive nodes uuid1: %s uuid2: %s", uuid_str, alive_uuid_node->data);
+            if(strcmp(uuid_str, alive_uuid_node->data) == 0) {
                 log_debug("uuid matched");
                 alive = true;
                 break;
@@ -272,7 +272,7 @@ int siridb_servers_refresh(siridb_t *siridb) {
         pool++;
     }
 
-    free(alive_uuid_list);
+    llist_free_cb(alive_uuid_list,(llist_cb) ALIVE_UUIDS_walk_free, NULL);
 
     if(rc == 0) {
         llist_t *servers_old = siridb->servers;
@@ -314,6 +314,7 @@ int siridb_servers_refresh(siridb_t *siridb) {
 
     return rc;
 }
+
 
 /*
  * Destroy servers, parsing NULL is not allowed.
@@ -794,6 +795,10 @@ int siridb_servers_save(siridb_t *siridb) {
     }
 
     return 0;
+}
+
+static void ALIVE_UUIDS_walk_free(char *uuid, void *args) {
+    free(uuid);
 }
 
 static void SERVERS_walk_free(siridb_server_t *server, void *args) {
