@@ -96,6 +96,9 @@ int siridb_servers_refresh(siridb_t *siridb) {
              siri.cfg->consul_address,
              siri.cfg->consul_port
     );
+
+    log_debug(buffer);
+
     FILE* fp = popen(buffer, "r");
     if (fp == NULL) {
         log_error("Failed to execute command to read healthchecks from consul agent: '%s'.", buffer);
@@ -103,6 +106,7 @@ int siridb_servers_refresh(siridb_t *siridb) {
         while (fgets(buffer, sizeof(buffer) - 1, fp) != NULL) {
             uuid_t uuid;
             buffer[strcspn(buffer, "\n")] = 0;
+            log_debug("Alive uuid: ", buffer);
             if (uuid_parse(buffer, uuid) == 0) {
                 log_debug("Appending uuid %s", buffer);
                 llist_append(alive_uuid_list,uuid);
