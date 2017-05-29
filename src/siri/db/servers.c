@@ -166,22 +166,6 @@ int siridb_servers_refresh(siridb_t *siridb) {
             return -1;
         }
 
-        //Check if uuid is alive
-        alive_uuid_node = alive_uuid_list->first;
-        bool alive = false;
-        while (alive_uuid_node != NULL)
-        {
-            if(uuid_compare(uuid, alive_uuid_node->data) == 0) {
-                alive = true;
-                break;
-            }
-            alive_uuid_node = alive_uuid_node->next;
-        }
-        if(!alive) {
-            continue;
-            log_debug("Skipped adding failed server: %s", buffer);
-        }
-
         /*read address*/
         if (fgets(buffer, sizeof(buffer) - 1, fp) == NULL) {
             log_error("Unexpected EOF when reading servers from consul. Expecting address");
@@ -214,6 +198,22 @@ int siridb_servers_refresh(siridb_t *siridb) {
             return -1;
         }
         uint16_t modify_idx = (uint16_t) strtoul(buffer, NULL, 10);
+
+        //Check if uuid is alive
+        alive_uuid_node = alive_uuid_list->first;
+        bool alive = false;
+        while (alive_uuid_node != NULL)
+        {
+            if(uuid_compare(uuid, alive_uuid_node->data) == 0) {
+                alive = true;
+                break;
+            }
+            alive_uuid_node = alive_uuid_node->next;
+        }
+        if(!alive) {
+            continue;
+            log_debug("Skipped adding failed server: %s", address);
+        }
 
         if(siridb->servers == NULL || (server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL) {
             server = siridb_server_new(
