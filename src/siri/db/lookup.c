@@ -51,18 +51,11 @@ uint16_t siridb_lookup_sn_raw(
     /*Execute command to read servers from consul, Key = server-uuid, Value = address, Flag = port*/
     snprintf(buffer,
              PATH_MAX,
-             "curl -s %s:%i/v1/kv/%s%s/%s | jq '.[] | .Value' -r",
+             "curl -s '%s:%i/v1/catalog/service/brumedb-series?tag=%s&stale' | jq '.[] |.ID' -r",
              siri.cfg->consul_address,
              siri.cfg->consul_port,
-             siri.cfg->consul_kv_prefix,
-             "series.dat",
              serie_name
     );
-
-    log_debug("Series name: %s",serie_name);
-    log_debug("Series len: %i", len);
-    log_debug("Series original name: ", sn);
-    log_debug("Buffer: %s", buffer);
 
     FILE* fp = popen(buffer, "r");
     if (fp == NULL) {
@@ -73,30 +66,30 @@ uint16_t siridb_lookup_sn_raw(
     if(fgets(buffer, sizeof(buffer) - 1, fp) != NULL) {
         uuid_t uuid;
         buffer[strcspn(buffer, "\n")] = 0;
-        char *server_uuid = base64_decode(buffer, PATH_MAX);
+        //char *server_uuid = base64_decode(buffer, PATH_MAX);
 
-        if (uuid_parse(server_uuid, uuid) != 0) {
-            log_error("Could not parse uuid of a server from consul '%s'.", server_uuid);
+        if (uuid_parse(buffer, uuid) != 0) {
+            log_error("Could not parse uuid of a server from consul '%s'.", buffer);
             pclose(fp);
             return local;
         }
 
         siridb_server_t* server = siridb_servers_by_uuid(servers, uuid);
         if (server == NULL) {
-            log_error("Could not get a server instance from uuid '%s'.", server_uuid);
+            log_error("Could not get a server instance from uuid '%s'.", buffer);
             pclose(fp);
             return local;
         }
 
         if (fgets(buffer, sizeof(buffer) - 1, fp) != NULL)
         {
-            log_critical("Expected end of file in data from consul");
+            log_error("Expected end of file in data from consul");
             pclose(fp);
             return local;
         }
 
         if (pclose(fp) / 256 != 0) {
-            log_critical("Command to retrieve servers from consul did not return exitcode 0.");
+            log_error("Command to retrieve servers from consul did not return exitcode 0.");
             return local;
         }
 
