@@ -280,6 +280,7 @@ int siridb_insert_points_to_pools(siridb_insert_t * insert, size_t npoints)
 
 int insert_init_backend_local(
         siridb_t * siridb,
+        siridb_server_t * source_server,
         uv_stream_t * client,
         sirinet_pkg_t * pkg,
         uint8_t flags)
@@ -314,6 +315,7 @@ int insert_init_backend_local(
     ilocal->ref = 1;
     ilocal->promise = promise;
     ilocal->siridb = siridb;
+    ilocal->source_server = source_server;
     ilocal->flags = flags;
     ilocal->status = INSERT_LOCAL_CANCELLED;
     ilocal->pcache = NULL;
@@ -785,6 +787,12 @@ static void INSERT_local_task(uv_async_t * handle)
                 &ilocal->pcache))
         {
             ilocal->status = INSERT_LOCAL_ERROR;
+        } else if (siridb->is_backup) {
+            siridb_series_t ** series = (siridb_series_t**) ct_get_sure(
+                            siridb->series,
+                            ilocal->qp_series_name.via.raw);
+
+            (*series)->pool = ilocal->source_server->pool;
         }
     }
     uv_mutex_unlock(&siridb->series_mutex);
@@ -880,6 +888,7 @@ static int INSERT_init_local(
     ilocal->ref = 1;
     ilocal->promise = promise;
     ilocal->siridb = siridb;
+    ilocal->source_server = siridb->server;
     qp_unpacker_init(&ilocal->unpacker, pkg->data, pkg->len);
     ilocal->flags = flags;
     ilocal->status = INSERT_LOCAL_CANCELLED;
@@ -1026,64 +1035,12 @@ static void INSERT_points_to_pools(uv_async_t * handle)
  */
 static uint16_t INSERT_get_pool(siridb_t * siridb, qp_obj_t * qp_series_name)
 {
-    uint16_t pool;
-
-    if (~siridb->flags & SIRIDB_FLAG_REINDEXING)
-    {
-        /* when not re-indexing, select the correct pool */
-        pool = siridb_lookup_sn_raw(
-                siridb->servers,
-                qp_series_name->via.raw,
-                siridb->server->pool,
-                qp_series_name->len);
-    }
-    else
-    {
-        if (ct_getn(
-                siridb->series,
-                qp_series_name->via.raw,
-                qp_series_name->len) != NULL)
-        {
-            /*
-             * we are re-indexing and at least at this moment still own the
-             * series
-             */
-            pool = siridb->server->pool;
-        }
-        else
-        {
-            /*
-             * We are re-indexing and do not have the series.
-             * Select the correct pool BEFORE re-indexing was
-             * started or the new correct pool if this pool is
-             * the previous correct pool. (we can do this now
-             * because we known we don't have the series)
-             */
-#ifdef DEBUG
-            assert (siridb->pools->prev_lookup != NULL);
-#endif
-            //TODO Do reindexing properly
-/*            pool = siridb_lookup_sn_raw(
-                    siridb->pools->prev_lookup,
-                    qp_series_name->via.raw,
-                    qp_series_name->len);
-
-            if (pool == siridb->server->pool)
-            {
-                pool = siridb_lookup_sn_raw(
-                        siridb->pools->lookup,
-                        qp_series_name->via.raw,
-                        qp_series_name->len);
-            }*/
-
-            pool = siridb_lookup_sn_raw(
-                    siridb->servers,
-                    qp_series_name->via.raw,
-                    siridb->server->pool,
-                    qp_series_name->len);
-        }
-    }
-    return pool;
+    return siridb_lookup_sn_raw(
+            siridb->servers,
+            siridb->series,
+            qp_series_name->via.raw,
+            siridb->server->pool,
+            qp_series_name->len);
 }
 
 /*

@@ -1105,7 +1105,7 @@ static void enter_series_name(uv_async_t * handle)
     else
     {
         /* get pool for series name */
-        pool = siridb_lookup_sn(siridb->servers, series_name, siridb->server->pool);
+        pool = siridb_lookup_sn(siridb->servers, siridb->series, series_name, siridb->server->pool);
 
         /* check if this series belongs to 'this' pool and if so get the series */
         if (pool == siridb->server->pool)

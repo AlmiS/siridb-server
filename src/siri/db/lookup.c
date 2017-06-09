@@ -22,9 +22,9 @@
 /*
  * Returns a pool id based on a terminated string.
  */
-uint16_t siridb_lookup_sn(llist_t * servers, const char * sn, uint16_t local)
+uint16_t siridb_lookup_sn(llist_t * servers, ct_t * series, const char * sn, uint16_t local)
 {
-    return siridb_lookup_sn_raw(servers, sn, 0, 0);
+    return siridb_lookup_sn_raw(servers, series, sn, local, 0);
 }
 
 /*
@@ -32,11 +32,14 @@ uint16_t siridb_lookup_sn(llist_t * servers, const char * sn, uint16_t local)
  */
 uint16_t siridb_lookup_sn_raw(
         llist_t * servers,
+        ct_t * series,
         const char * sn,
         uint16_t local,
         size_t len
         )
 {
+    return 1;
+
     char buffer[PATH_MAX];
     if(len == 0) {
         len = strlen(sn);
@@ -48,7 +51,11 @@ uint16_t siridb_lookup_sn_raw(
              sn
     );
 
-    /*Execute command to read servers from consul, Key = server-uuid, Value = address, Flag = port*/
+    // If this series is ours, return the local pool
+    if (ct_get(series, serie_name) != NULL) {
+        return local;
+    }
+
     snprintf(buffer,
              PATH_MAX,
              "curl -s '%s:%i/v1/catalog/service/brumedb-series?tag=%s&stale' | jq '.[] |.ID' -r",

@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <xpath/xpath.h>
+#include <base64/base64.h>
 
 #define SIRIDB_SERIES_FN "series.dat"
 #define SIRIDB_DROPPED_FN ".dropped"
@@ -53,8 +54,9 @@
                     siridb_shard_get_points_num64;
 
 static int SERIES_save(siridb_t * siridb);
-static int SERIES_load(siridb_t * siridb, imap_t * dropped);
+static int SERIES_load(siridb_t * siridb, imap_t * dropped, ct_t * my_series);
 static int SERIES_read_dropped(siridb_t * siridb, imap_t * dropped);
+static int SERIES_read_owned(siridb_t * siridb, ct_t * owned);
 static int SERIES_open_new_dropped_file(siridb_t * siridb);
 static int SERIES_open_dropped_file(siridb_t * siridb);
 static int SERIES_update_max_id(siridb_t * siridb);
@@ -403,6 +405,7 @@ int siridb_series_load(siridb_t * siridb)
     log_info("Loading series");
 
     imap_t * dropped = imap_new();
+    ct_t * owned = ct_new();
 
     if (dropped == NULL)
     {
@@ -410,13 +413,16 @@ int siridb_series_load(siridb_t * siridb)
     }
 
     if (SERIES_read_dropped(siridb, dropped) ||
-        SERIES_load(siridb, dropped))
+        SERIES_read_owned(siridb, owned) ||
+        SERIES_load(siridb, dropped, owned))
     {
         imap_free(dropped, NULL);
+        ct_free(owned, NULL);
         return -1;
     }
 
     imap_free(dropped, NULL);
+    ct_free(owned, NULL);
 
     if (SERIES_update_max_id(siridb) ||
         SERIES_open_new_dropped_file(siridb) ||
@@ -551,6 +557,44 @@ int siridb_series_drop_commit(siridb_t * siridb, siridb_series_t * series)
         log_critical("Cannot write %d to dropped cache file.", series->id);
         rc = -1;
     };
+
+    char buffer[PATH_MAX];
+    char uuid_str[37];
+    uuid_unparse(siridb->pools->pool[series->pool].server[0]->uuid, uuid_str);
+
+    if(siridb->reindex != NULL && series->id == siridb->reindex->series->id) {
+        /* This series has been re-indexed so just update the owner.
+        Update series in consul. */
+
+        snprintf(buffer,
+                 PATH_MAX,
+                 "curl -s -X PUT -d '%s' %s:%i/v1/kv/%s%s/%s",
+                 uuid_str,
+                 siri.cfg->consul_address,
+                 siri.cfg->consul_port,
+                 siri.cfg->consul_kv_prefix,
+                 "series.dat",
+                 series->name);
+    } else {
+        /* This series has been dropped.
+        Delete series in consul. */
+
+        snprintf(buffer,
+                 PATH_MAX,
+                 "curl -s -X DELETE %s:%i/v1/kv/%s%s/%s",
+                 siri.cfg->consul_address,
+                 siri.cfg->consul_port,
+                 siri.cfg->consul_kv_prefix,
+                 "series.dat",
+                 series->name);
+    }
+
+    FILE *fp = popen(buffer, "r");
+
+    if (fp == NULL || fgets(buffer, sizeof(buffer)-1, fp) == NULL || pclose(fp) / 256 != 0) {
+        log_error("Failed to execute command to update or delete series owner in consul.");
+        rc = -1;
+    }
 
     /* decrement reference to series */
     siridb_series_decref(series);
@@ -1286,6 +1330,55 @@ static int SERIES_save(siridb_t * siridb)
  * Returns 0 if successful or -1 in case of an error.
  * (a SIGNAL might be raised but -1 should be considered critical in any case)
  */
+static int SERIES_read_owned(siridb_t * siridb, ct_t * owned)
+{
+    log_debug("Loading owned series");
+
+    int rc = 0;
+    char buffer[PATH_MAX];
+    FILE * fp;
+
+    char uuid_str[37];
+    uuid_unparse(siridb->uuid, uuid_str);
+    char * uuid_base64 = base64_encode(uuid_str, PATH_MAX);
+    uuid_base64[strcspn(uuid_base64, "\n")] = 0;
+
+    snprintf(buffer,
+             PATH_MAX,
+             "curl -s -X GET %s:%i/v1/kv/%s%s?recurse | jq '.[] | select(.Value==\"%s\") | .Key | ltrimstr(\"%s%s/\")' -r",
+             siri.cfg->consul_address,
+             siri.cfg->consul_port,
+             siri.cfg->consul_kv_prefix,
+             "series.dat",
+             uuid_base64,
+             siri.cfg->consul_kv_prefix,
+             "series.dat"
+    );
+
+    log_debug(buffer);
+
+    fp = popen(buffer, "r");
+    if (fp == NULL) {
+        log_critical("Failed to execute command to read series from consul: '%s'.", buffer);
+        rc = -1;
+    } else {
+        while (fgets(buffer, sizeof(buffer) - 1, fp) != NULL) {
+            ct_add(owned, strdup(buffer), "");
+        }
+
+        if (pclose(fp) / 256 != 0) {
+            log_critical("Command to retrieve series from consul did not return exitcode 0.");
+            rc = -1;
+        }
+    }
+
+    return rc;
+}
+
+/*
+ * Returns 0 if successful or -1 in case of an error.
+ * (a SIGNAL might be raised but -1 should be considered critical in any case)
+ */
 static int SERIES_read_dropped(siridb_t * siridb, imap_t * dropped)
 {
     char * buffer;
@@ -1352,7 +1445,7 @@ static int SERIES_read_dropped(siridb_t * siridb, imap_t * dropped)
     return rc;
 }
 
-static int SERIES_load(siridb_t * siridb, imap_t * dropped)
+static int SERIES_load(siridb_t * siridb, imap_t * dropped, ct_t * owned)
 {
     qp_unpacker_t * unpacker;
     qp_obj_t qp_series_name;
@@ -1395,7 +1488,7 @@ static int SERIES_load(siridb_t * siridb, imap_t * dropped)
             siridb->max_series_id = series_id;
         }
 
-        if (imap_get(dropped, series_id) == NULL)
+        if (imap_get(dropped, series_id) == NULL && ct_get(owned, qp_series_name.via.raw) != NULL)
         {
             series = SERIES_new(
                     siridb,

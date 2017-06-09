@@ -26,6 +26,7 @@ static siri_cfg_t siri_cfg = {
         .max_open_files=DEFAULT_OPEN_FILES_LIMIT,
         .optimize_interval=3600,
         .ip_support=IP_SUPPORT_ALL,
+        .is_backup=0,
         .server_address="localhost",
         .default_db_path="/var/lib/siridb/",
         .consul_address="localhost",
@@ -123,6 +124,15 @@ void siri_cfg_init(siri_t *siri) {
 
     /*Must come after consul settings*/
     SIRI_CFG_read_server_uuid(cfgparser);
+
+    tmp = siri_cfg.is_backup;
+    SIRI_CFG_read_uint(
+            cfgparser,
+            "is_backup",
+            0,
+            1,
+            &tmp);
+    siri_cfg.is_backup = (uint8_t) tmp;
 
     /* free parser */
     cfgparser_free(cfgparser);

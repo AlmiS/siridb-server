@@ -14,14 +14,21 @@
 #include <inttypes.h>
 #include <stddef.h>
 #include <llist/llist.h>
+#include <ctree/ctree.h>
 
 #define SIRIDB_LOOKUP_SZ 8192
 
 typedef uint_fast16_t siridb_lookup_t[SIRIDB_LOOKUP_SZ];
 
-uint16_t siridb_lookup_sn(llist_t * servers, const char * sn, uint16_t local);
+uint16_t siridb_lookup_sn(
+        llist_t * servers,
+        ct_t * series,
+        const char * sn,
+        uint16_t local);
+
 uint16_t siridb_lookup_sn_raw(
         llist_t * servers,
+        ct_t * series,
         const char * sn,
         uint16_t local,
         size_t len);

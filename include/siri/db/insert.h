@@ -65,6 +65,7 @@ typedef struct siridb_insert_local_s
     uint8_t ref;
     uint8_t flags;
     int8_t status;
+    siridb_server_t * source_server;
     qp_unpacker_t unpacker;
     qp_obj_t qp_series_name;
     siridb_t * siridb;
@@ -87,6 +88,7 @@ void siridb_insert_free(siridb_insert_t * insert);
 int siridb_insert_points_to_pools(siridb_insert_t * insert, size_t npoints);
 int insert_init_backend_local(
         siridb_t * siridb,
+        siridb_server_t * source_server,
         uv_stream_t * client,
         sirinet_pkg_t * pkg,
         uint8_t flags);

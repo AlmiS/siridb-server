@@ -94,6 +94,7 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
 
             series_list = imap_2slist_ref(siridb->series_map);
 
+            uint8_t do_reindex = 0;
             for(int i = 0; i < series_list->len; i++) {
                 series = (siridb_series_t*) series_list->data[i];
                 snprintf(buffer,
@@ -102,6 +103,14 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
                          series->name
                 );
                 fprintf(f,buffer);
+                if(series->pool != siridb->server->pool) {
+                    do_reindex++;
+                }
+            }
+
+            if (~siridb->flags & SIRIDB_FLAG_REINDEXING && do_reindex)
+            {
+                siridb->reindex = siridb_reindex_open(siridb, 1);
             }
 
             fprintf(f,"], \"port\": %i}}\n",siridb->server->port);
@@ -166,6 +175,11 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
             }
 
             server_node = server_node->next;
+        }
+
+        if (siridb->reindex != NULL)
+        {
+            siridb_reindex_start(siridb->reindex->timer);
         }
 
         siridb_node = siridb_node->next;

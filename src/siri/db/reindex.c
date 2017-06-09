@@ -39,7 +39,7 @@
 
 #define REINDEX_SLEEP 100           // 100 milliseconds * active tasks
 #define REINDEX_RETRY 5000          // 5 seconds
-#define REINDEX_INITWAIT 20000      // 20 seconds
+#define REINDEX_INITWAIT 2000      // 2 seconds
 #define REINDEX_TIMEOUT 300000      // 5 minutes
 
 #define NEXT_SERIES_ERR -1
@@ -463,12 +463,10 @@ static void REINDEX_work(uv_timer_t * timer)
 #endif
 
     reindex->series = imap_get(siridb->series_map, *reindex->next_series_id);
+    reindex->server = siridb->pools->pool[reindex->series->pool].server[0];
 
     if (    reindex->series == NULL ||
-            //TODO propper reindex
-            /*siridb_lookup_sn(
-                    siridb->pools->lookup,
-                    reindex->series->name) == siridb->server->pool ||*/
+            reindex->server == siridb->server ||
             (siridb->replica != NULL &&
              siridb_series_server_id(reindex->series) != siridb->server->id))
     {

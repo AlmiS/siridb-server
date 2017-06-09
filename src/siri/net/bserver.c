@@ -527,13 +527,17 @@ static void on_insert(uv_stream_t * client, sirinet_pkg_t * pkg, int flags)
          * to finish. We rather prevent servers from starting new insert tasks.
          */
         if (    (~siridb->server->flags & SERVER_FLAG_RUNNING) ||
-                insert_init_backend_local(siridb, client, pkg, flags))
+                insert_init_backend_local(siridb, server, client, pkg, flags))
         {
             package = sirinet_pkg_new(pkg->pid, 0, BPROTO_ERR_INSERT, NULL);
             if (package != NULL)
             {
                 sirinet_pkg_send(client, package);
             }
+        }
+        else if (siridb->is_backup) {
+            //TODO init reindexing task
+
         }
     }
 }

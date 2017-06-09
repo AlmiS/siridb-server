@@ -127,6 +127,8 @@ siridb_t * siridb_new(siri_cfg_t *cfg, int lock_flags)
         return NULL;
     }
 
+    siridb->is_backup = cfg->is_backup;
+
     log_info("Start loading database: '%s'", siridb->dbname);
 
     /* load users */
@@ -210,15 +212,14 @@ siridb_t * siridb_new(siri_cfg_t *cfg, int lock_flags)
     log_info("Initialize pools");
     siridb_pools_init(siridb);
 
-    //TODO Do reindexing properly
-/*    if (!siri_err)
+    if (!siri_err)
     {
         siridb->reindex = siridb_reindex_open(siridb, 0);
         if (siridb->reindex != NULL && siridb->replica == NULL)
         {
             siridb_reindex_start(siridb->reindex->timer);
         }
-    }*/
+    }
 
     siridb->start_ts = time(NULL);
 

@@ -80,6 +80,7 @@ typedef struct siridb_s
     uint16_t shard_mask_num;
     uint16_t shard_mask_log;
     uuid_t uuid;
+    uint8_t is_backup;
     iso8601_tz_t tz;
     size_t buffer_size;
     size_t buffer_len;
