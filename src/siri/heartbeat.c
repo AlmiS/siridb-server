@@ -128,36 +128,40 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
             pclose(f);
         }
 
-        // Do we have dead nodes in our servers list
-        snprintf(buffer,
-                 PATH_MAX,
-                 "curl -s -X GET %s:%i/v1/agent/members | jq '.[] | select(.Status==1) | .Tags.id' -r",
-                 siri.cfg->consul_address,
-                 siri.cfg->consul_port
-        );
-        f = popen(buffer, "r");
-        if (f == NULL) {
-            log_error("Failed to execute command to read healthchecks from consul agent: '%s'.", buffer);
-        } else {
-            int i=0;
-            while (fgets(buffer, sizeof(buffer) - 1, f) != NULL) {
-                uuid_t uuid;
-                buffer[strcspn(buffer, "\n")] = 0;
-                if (uuid_parse(buffer, uuid) != 0) {
-                    log_error("Could not parse uuid of a server from consul '%s'.", buffer);
-                    continue;
+        if(handle != NULL) {
+            // Do we have dead nodes in our servers list
+            // Only do if this is not a forced heatbeat
+            snprintf(buffer,
+                     PATH_MAX,
+                     "curl -s -X GET %s:%i/v1/agent/members | jq '.[] | select(.Status==1) | .Tags.id' -r",
+                     siri.cfg->consul_address,
+                     siri.cfg->consul_port
+            );
+            f = popen(buffer, "r");
+            if (f == NULL) {
+                log_error("Failed to execute command to read healthchecks from consul agent: '%s'.", buffer);
+            } else {
+                int i=0;
+                while (fgets(buffer, sizeof(buffer) - 1, f) != NULL) {
+                    uuid_t uuid;
+                    buffer[strcspn(buffer, "\n")] = 0;
+                    if (uuid_parse(buffer, uuid) != 0) {
+                        log_error("Could not parse uuid of a server from consul '%s'.", buffer);
+                        continue;
+                    }
+                    if(siridb_servers_by_uuid(siridb->servers, uuid) == NULL) {
+                        i = -1; // Will force the refresh of servers
+                        break;
+                    }
+                    i++;
                 }
-                if(siridb_servers_by_uuid(siridb->servers, uuid) == NULL) {
-                    i = -1; // Will force the refresh of servers
-                    break;
+                pclose(f);
+                if(i != siridb->servers->len) {
+                    siridb_servers_refresh(siridb);
                 }
-                i++;
-            }
-            pclose(f);
-            if(i != siridb->servers->len) {
-                siridb_servers_refresh(siridb);
             }
         }
+
 
         // Servers heartbeat
         server_node = siridb->servers->first;

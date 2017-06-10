@@ -1301,7 +1301,6 @@ static int SERIES_save(siridb_t * siridb)
         return EOF;
     }
 
-
     if (/* open a new array */
         qp_fadd_type(fpacker, QP_ARRAY_OPEN) ||
 
@@ -1363,6 +1362,7 @@ static int SERIES_read_owned(siridb_t * siridb, ct_t * owned)
         rc = -1;
     } else {
         while (fgets(buffer, sizeof(buffer) - 1, fp) != NULL) {
+            buffer[strcspn(buffer, "\n")] = 0;
             ct_add(owned, strdup(buffer), "");
         }
 
@@ -1694,5 +1694,3 @@ static void SERIES_update_end(siridb_series_t *__restrict series)
         }
     }
 }
-
-
