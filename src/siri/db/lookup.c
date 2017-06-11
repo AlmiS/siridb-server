@@ -56,13 +56,15 @@ uint16_t siridb_lookup_sn_raw(
 
     snprintf(buffer,
              PATH_MAX,
-             "curl -s '%s:%i/v1/kv/%s%s/%s&stale' | jq '.[] | .Value' -r",
+             "curl -s '%s:%i/v1/kv/%s%s/%s' | jq '.[] | .Value' -r",
              siri.cfg->consul_address,
              siri.cfg->consul_port,
              siri.cfg->consul_kv_prefix,
              "series.dat",
              serie_name
     );
+
+    log_debug(buffer);
 
     FILE* fp = popen(buffer, "r");
     if (fp == NULL) {
