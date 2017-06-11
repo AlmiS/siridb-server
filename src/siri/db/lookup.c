@@ -38,8 +38,6 @@ uint16_t siridb_lookup_sn_raw(
         size_t len
         )
 {
-    return 1;
-
     char buffer[PATH_MAX];
     if(len == 0) {
         len = strlen(sn);
@@ -58,33 +56,37 @@ uint16_t siridb_lookup_sn_raw(
 
     snprintf(buffer,
              PATH_MAX,
-             "curl -s '%s:%i/v1/catalog/service/brumedb-series?tag=%s&stale' | jq '.[] |.ID' -r",
+             "curl -s '%s:%i/v1/kv/%s%s/%s&stale' | jq '.[] | .Value' -r",
              siri.cfg->consul_address,
              siri.cfg->consul_port,
+             siri.cfg->consul_kv_prefix,
+             "series.dat",
              serie_name
     );
 
     FILE* fp = popen(buffer, "r");
     if (fp == NULL) {
-        log_error("Failed to execute command to read servers: '%s'.", buffer);
+        log_error("Failed to execute command to read series: '%s'.", buffer);
         return local;
     }
 
     if(fgets(buffer, sizeof(buffer) - 1, fp) != NULL) {
         uuid_t uuid;
         buffer[strcspn(buffer, "\n")] = 0;
-        //char *server_uuid = base64_decode(buffer, PATH_MAX);
+        char *server_uuid = base64_decode(buffer, PATH_MAX);
 
-        if (uuid_parse(buffer, uuid) != 0) {
-            log_error("Could not parse uuid of a server from consul '%s'.", buffer);
+        if (uuid_parse(server_uuid, uuid) != 0) {
+            log_error("Could not parse uuid of a server from consul '%s'.", server_uuid);
             pclose(fp);
+            free(server_uuid);
             return local;
         }
 
         siridb_server_t* server = siridb_servers_by_uuid(servers, uuid);
         if (server == NULL) {
-            log_error("Could not get a server instance from uuid '%s'.", buffer);
+            log_error("Could not get a server instance from uuid '%s'.", server_uuid);
             pclose(fp);
+            free(server_uuid);
             return local;
         }
 
@@ -92,14 +94,17 @@ uint16_t siridb_lookup_sn_raw(
         {
             log_error("Expected end of file in data from consul");
             pclose(fp);
+            free(server_uuid);
             return local;
         }
 
         if (pclose(fp) / 256 != 0) {
             log_error("Command to retrieve servers from consul did not return exitcode 0.");
+            free(server_uuid);
             return local;
         }
 
+        free(server_uuid);
         return server->pool;
     }
 

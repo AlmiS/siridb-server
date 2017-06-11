@@ -80,7 +80,7 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
         siridb = (siridb_t *) siridb_node->data;
 
         // Series tags
-        snprintf(buffer,
+        /*snprintf(buffer,
                  PATH_MAX,
                  "%sbrumedb-series.json",
                  siridb->dbpath);
@@ -126,18 +126,26 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
             FILE *f = popen(buffer, "r");
 
             pclose(f);
-        }
+        }*/
 
         if(handle != NULL) {
             // Do we have dead nodes in our servers list
             // Only do if this is not a forced heatbeat
-            snprintf(buffer,
+            /*snprintf(buffer,
                      PATH_MAX,
                      "curl -s -X GET %s:%i/v1/agent/members | jq '.[] | select(.Status==1) | .Tags.id' -r",
                      siri.cfg->consul_address,
                      siri.cfg->consul_port
+            );*/
+            snprintf(buffer,
+                     PATH_MAX,
+                     "curl -s %s:%i/v1/kv/%slocks?recurse | jq '.[] | .Key | ltrimstr(\"%slocks/\") | rtrimstr(\"/.lock\")' -r",
+                     siri.cfg->consul_address,
+                     siri.cfg->consul_port,
+                     siri.cfg->consul_kv_prefix,
+                     siri.cfg->consul_kv_prefix
             );
-            f = popen(buffer, "r");
+            FILE *f = popen(buffer, "r");
             if (f == NULL) {
                 log_error("Failed to execute command to read healthchecks from consul agent: '%s'.", buffer);
             } else {
@@ -161,7 +169,6 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
                 }
             }
         }
-
 
         // Servers heartbeat
         server_node = siridb->servers->first;

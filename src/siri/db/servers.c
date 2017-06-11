@@ -90,11 +90,19 @@ int siridb_servers_refresh(siridb_t *siridb) {
     llist_t *alive_uuid_list = llist_new();
 
     // Find uuids of alive nodes
-    snprintf(buffer,
+    /*snprintf(buffer,
              PATH_MAX,
              "curl -s -X GET %s:%i/v1/agent/members | jq '.[] | select(.Status==1) | .Tags.id' -r",
              siri.cfg->consul_address,
              siri.cfg->consul_port
+    );*/
+    snprintf(buffer,
+             PATH_MAX,
+             "curl %s:%i/v1/kv/%slocks?recurse | jq '.[] | .Key | ltrimstr(\"%slocks/\") | rtrimstr(\"/.lock\")' -r",
+             siri.cfg->consul_address,
+             siri.cfg->consul_port,
+             siri.cfg->consul_kv_prefix,
+             siri.cfg->consul_kv_prefix
     );
 
     log_debug(buffer);
