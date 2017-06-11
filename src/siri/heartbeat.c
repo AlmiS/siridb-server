@@ -64,7 +64,6 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
 
     llist_node_t * siridb_node;
     llist_node_t * server_node;
-    siridb_series_t * series;
     slist_t * series_list;
 
     char buffer[PATH_MAX];
@@ -79,54 +78,20 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
     {
         siridb = (siridb_t *) siridb_node->data;
 
-        // Series tags
-        /*snprintf(buffer,
-                 PATH_MAX,
-                 "%sbrumedb-series.json",
-                 siridb->dbpath);
+        series_list = imap_2slist_ref(siridb->series_map);
+        uint8_t do_reindex = 0;
+        for(int i = 0; i < series_list->len; i++) {
+            if(((siridb_series_t*) series_list->data[i])->pool != siridb->server->pool) {
+                do_reindex++;
+            }
+        }
 
-        FILE *f = fopen(buffer, "w");
-        if (f == NULL)
+        if (~siridb->flags & SIRIDB_FLAG_REINDEXING && do_reindex)
         {
-            log__error("Error opening file for registering timeseries from heartbeat task");
-        } else {
-            fprintf(f, "{\"service\": {\"name\": \"brumedb-series\", \"tags\": [");
+            siridb->reindex = siridb_reindex_open(siridb, 1);
+        }
 
-            series_list = imap_2slist_ref(siridb->series_map);
-
-            uint8_t do_reindex = 0;
-            for(int i = 0; i < series_list->len; i++) {
-                series = (siridb_series_t*) series_list->data[i];
-                snprintf(buffer,
-                         PATH_MAX,
-                         i == 0 ? "\"%s\"" : ",\"%s\"",
-                         series->name
-                );
-                fprintf(f,buffer);
-                if(series->pool != siridb->server->pool) {
-                    do_reindex++;
-                }
-            }
-
-            if (~siridb->flags & SIRIDB_FLAG_REINDEXING && do_reindex)
-            {
-                siridb->reindex = siridb_reindex_open(siridb, 1);
-            }
-
-            fprintf(f,"], \"port\": %i}}\n",siridb->server->port);
-            fclose(f);
-            slist_free(series_list);
-
-            snprintf(buffer,
-                     PATH_MAX,
-                     "! (diff %sbrumedb-series.json /etc/consul.d/services/brumedb-series.json) && (cp -f %sbrumedb-series.json /etc/consul.d/services/brumedb-series.json; consul reload)",
-                     siridb->dbpath,
-                     siridb->dbpath
-            );
-            FILE *f = popen(buffer, "r");
-
-            pclose(f);
-        }*/
+        slist_free(series_list);
 
         if(handle != NULL) {
             // Do we have dead nodes in our servers list
@@ -139,12 +104,15 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
             );*/
             snprintf(buffer,
                      PATH_MAX,
-                     "curl -s %s:%i/v1/kv/%slocks?recurse | jq '.[] | .Key | ltrimstr(\"%slocks/\") | rtrimstr(\"/.lock\")' -r",
+                     "curl -s %s:%i/v1/kv/%slocks?recurse | jq 'map( select( has(\"Session\"))) | .[] | .Key | ltrimstr(\"%slocks/\") | rtrimstr(\"/.lock\")' -r",
                      siri.cfg->consul_address,
                      siri.cfg->consul_port,
                      siri.cfg->consul_kv_prefix,
                      siri.cfg->consul_kv_prefix
             );
+
+            log_debug(buffer);
+
             FILE *f = popen(buffer, "r");
             if (f == NULL) {
                 log_error("Failed to execute command to read healthchecks from consul agent: '%s'.", buffer);

@@ -98,7 +98,7 @@ int siridb_servers_refresh(siridb_t *siridb) {
     );*/
     snprintf(buffer,
              PATH_MAX,
-             "curl %s:%i/v1/kv/%slocks?recurse | jq '.[] | .Key | ltrimstr(\"%slocks/\") | rtrimstr(\"/.lock\")' -r",
+             "curl %s:%i/v1/kv/%slocks?recurse | jq 'map( select( has(\"Session\"))) | .[] | .Key | ltrimstr(\"%slocks/\") | rtrimstr(\"/.lock\")' -r",
              siri.cfg->consul_address,
              siri.cfg->consul_port,
              siri.cfg->consul_kv_prefix,
