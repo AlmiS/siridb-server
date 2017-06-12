@@ -120,7 +120,7 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
             if (f == NULL) {
                 log_error("Failed to execute command to read healthchecks from consul agent: '%s'.", buffer);
             } else {
-                //int i=0;
+                int i=0;
                 while (fgets(buffer, sizeof(buffer) - 1, f) != NULL) {
                     uuid_t uuid;
                     buffer[strcspn(buffer, "\n")] = 0;
@@ -128,21 +128,25 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
                         log_error("Could not parse uuid of a server from consul '%s'.", buffer);
                         continue;
                     }
-                    /*if(siridb_servers_by_uuid(siridb->servers, uuid) == NULL) {
+                    if(siridb_servers_by_uuid(siridb->servers, uuid) == NULL) {
                         i = -1; // Will force the refresh of servers
                         break;
-                    }*/
+                    }
+                    if(siridb_servers_by_uuid(siridb->servers, uuid)->modify_idx == 0) {
+                        i = -1; // Will force the refresh of servers
+                        break;
+                    }
                     if(siridb_servers_by_uuid(siridb->servers, uuid) == siridb->server) {
                         log_debug("Seems like the server which this backup was running for has come back online.");
                         pclose(f);
                         exit(0);
                     }
-                    //i++;
+                    i++;
                 }
                 pclose(f);
-/*                if(i != siridb->servers->len) {
+                if(i != siridb->servers->len) {
                     siridb_servers_refresh(siridb);
-                }*/
+                }
             }
         }
 
@@ -150,17 +154,13 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
         server_node = siridb->servers->first;
         while (server_node != NULL)
         {
-            if(server->modify_idx == 0) {
-                siridb_servers_refresh(siridb);
-                return;
-            }
             server = server_node->data;
             if (    server != siridb->server &&
                     server->socket == NULL)
             {
                 siridb_server_connect(siridb, server);
             }
-            else if (siridb_server_is_online(server))
+            else if (server->modify_idx != 0 && siridb_server_is_online(server))
             {
                 siridb_server_send_flags(server);
             }
