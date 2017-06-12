@@ -465,7 +465,8 @@ static void REINDEX_work(uv_timer_t * timer)
     reindex->series = imap_get(siridb->series_map, *reindex->next_series_id);
     reindex->server = siridb->pools->pool[reindex->series->pool].server[0];
 
-    if (    reindex->series == NULL ||
+    if (    reindex->series->reindex == 0,
+            reindex->series == NULL ||
             reindex->server == siridb->server ||
             (siridb->replica != NULL &&
              siridb_series_server_id(reindex->series) != siridb->server->id))

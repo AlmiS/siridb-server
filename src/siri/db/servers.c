@@ -104,7 +104,6 @@ int siridb_servers_refresh(siridb_t *siridb) {
              siri.cfg->consul_kv_prefix,
              siri.cfg->consul_kv_prefix
     );
-
     log_debug(buffer);
 
     FILE* fp = popen(buffer, "r");
@@ -154,7 +153,7 @@ int siridb_servers_refresh(siridb_t *siridb) {
 
     size_t skipchars = strlen(buffer);
     int rc = 0;
-    uint16_t pool = 0;
+    int pool = 0;
     bool do_force_heartbeat = false;
 
     /* create a new server list */
@@ -213,7 +212,7 @@ int siridb_servers_refresh(siridb_t *siridb) {
         uint16_t modify_idx = (uint16_t) strtoul(buffer, NULL, 10);
 
         //Check if uuid is alive
-        llist_node_t *alive_uuid_node = alive_uuid_list->first;
+        /*llist_node_t *alive_uuid_node = alive_uuid_list->first;
         bool alive = false;
         while (alive_uuid_node != NULL)
         {
@@ -230,7 +229,7 @@ int siridb_servers_refresh(siridb_t *siridb) {
         if(!alive) {
             log_debug("Skipped adding failed server: %s", address);
             continue;
-        }
+        }*/
 
         if(siridb->servers == NULL || (server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL) {
             server = siridb_server_new(

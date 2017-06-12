@@ -793,6 +793,7 @@ static void INSERT_local_task(uv_async_t * handle)
                             ilocal->qp_series_name.via.raw);
 
             (*series)->pool = ilocal->source_server->pool;
+            (*series)->reindex = 1;
         }
     }
     uv_mutex_unlock(&siridb->series_mutex);

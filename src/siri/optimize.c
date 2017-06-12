@@ -239,12 +239,33 @@ static void OPTIMIZE_work(uv_work_t * work)
             siridb_shard_decref(shard);
         }
 
+
         slist_free(slshards);
 
         if (siri_optimize_wait() == SIRI_OPTIMIZE_CANCELLED)
         {
             break;
         }
+
+        log_debug("Optimize task hashing db: %s", siridb->dbpath);
+        if (!siridb->is_backup) {
+            char uuid_str[37];
+            char buffer[PATH_MAX];
+            uuid_unparse(siridb->uuid,uuid_str);
+
+            snprintf(buffer,
+                     PATH_MAX,
+                     "brumefs put %s%s %s",
+                     siri.cfg->consul_kv_prefix,
+                     uuid_str,
+                     siridb->dbpath
+            );
+            FILE* fp = popen(buffer, "r");
+            if (fp == NULL || pclose(fp) / 256 != 0) {
+                log_error("Failed hash database %s to brumefs", siridb->dbpath);
+            }
+        }
+
 #ifdef DEBUG
         log_debug("Finished optimizing database '%s'", siridb->dbname);
 #endif

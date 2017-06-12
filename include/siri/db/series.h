@@ -61,6 +61,7 @@ typedef struct siridb_series_s
     uint32_t id;
     uint16_t mask;
     uint16_t pool;
+    uint16_t reindex;
     uint16_t name_len;
     uint8_t flags;
     uint8_t tp;
