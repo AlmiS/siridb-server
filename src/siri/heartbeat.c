@@ -150,6 +150,10 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
         server_node = siridb->servers->first;
         while (server_node != NULL)
         {
+            if(server->modify_idx == 0) {
+                siridb_servers_refresh(siridb);
+                return;
+            }
             server = server_node->data;
             if (    server != siridb->server &&
                     server->socket == NULL)
@@ -172,3 +176,4 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
         siridb_node = siridb_node->next;
     }
 }
+

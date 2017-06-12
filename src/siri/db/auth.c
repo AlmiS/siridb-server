@@ -107,17 +107,17 @@ bproto_server_t siridb_auth_server_request(
         return BPROTO_AUTH_ERR_UNKNOWN_UUID;
     }
 
-    siridb_servers_refresh(siridb);
-
-    /*if((server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL) {
+    if((server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL) {
         // Check consul to see if this server exists but we did not know about it is new
         // eg. call refresh servers
-        siridb_servers_refresh(siridb);*/
+        siridb_servers_refresh(siridb);
 
         if((server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL) {
             return BPROTO_AUTH_ERR_UNKNOWN_UUID;
         }
-    //}
+    } else {
+        server->modify_idx = 0;
+    }
 
     ((sirinet_socket_t *) client->data)->siridb = siridb;
     ((sirinet_socket_t *) client->data)->origin = server;
