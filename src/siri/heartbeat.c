@@ -95,7 +95,7 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
 
         slist_free(series_list);
 
-        if(siridb->is_backup && handle != NULL && ~siridb->flags & SIRIDB_FLAG_REINDEXING) {
+        if(handle != NULL && ~siridb->flags & SIRIDB_FLAG_REINDEXING) {
             // Do we have dead nodes in our servers list
             // Only do if this is not a forced heatbeat
 
@@ -129,24 +129,21 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
                         continue;
                     }
                     if(siridb_servers_by_uuid(siridb->servers, uuid) == NULL) {
-                        i = -1; // Will force the refresh of servers
+                        siridb_servers_refresh(siridb);
                         break;
                     }
                     if(siridb_servers_by_uuid(siridb->servers, uuid)->modify_idx == 0) {
-                        i = -1; // Will force the refresh of servers
+                        siridb_servers_refresh(siridb);
                         break;
                     }
-                    if(siridb_servers_by_uuid(siridb->servers, uuid) == siridb->server) {
+                    if(siridb->is_backup && siridb_servers_by_uuid(siridb->servers, uuid) == siridb->server) {
                         log_debug("Seems like the server which this backup was running for has come back online.");
                         pclose(f);
                         abort();
                     }
-                    i++;
+
                 }
                 pclose(f);
-                if(i != siridb->servers->len) {
-                    siridb_servers_refresh(siridb);
-                }
             }
         }
 
