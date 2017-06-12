@@ -116,7 +116,7 @@ bproto_server_t siridb_auth_server_request(
             return BPROTO_AUTH_ERR_UNKNOWN_UUID;
         }
     } else {
-        server->modify_idx = 0;
+        sirinet_socket_decref(server->socket);
     }
 
     ((sirinet_socket_t *) client->data)->siridb = siridb;
@@ -124,6 +124,7 @@ bproto_server_t siridb_auth_server_request(
 
     free(server->version);
     server->version = strdup(qp_version->via.raw);
+
 
     /* we must increment the server reference counter */
     siridb_server_incref(server);
