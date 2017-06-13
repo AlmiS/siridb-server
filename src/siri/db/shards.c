@@ -105,15 +105,22 @@ int siridb_shards_load(siridb_t * siridb)
         if (siridb_shard_load(siridb, (uint64_t) atoll(shard_list[n]->d_name)))
         {
            log_error("Error while loading shard: '%s'", shard_list[n]->d_name);
-            int ret = remove(shard_list[n]->d_name);
 
-            if(ret == 0)
+            char buffer[PATH_MAX];
+            snprintf(buffer,
+                     PATH_MAX,
+                     "rm -f %s",
+                     shard_list[n]->d_name
+            );
+            FILE* fp = popen(buffer, "r");
+
+            if(fp == NULL || pclose(fp) / 256 != 0)
             {
-                printf("Shard deleted successfully");
+                log_error("Error: unable to delete the shard");
             }
             else
             {
-                printf("Error: unable to delete the shard");
+                log_info("Shard deleted successfully");
             }
            rc = -1;
            break;
