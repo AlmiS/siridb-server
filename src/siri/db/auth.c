@@ -107,24 +107,48 @@ bproto_server_t siridb_auth_server_request(
         return BPROTO_AUTH_ERR_UNKNOWN_UUID;
     }
 
-    if((server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL) {
-        // Check consul to see if this server exists but we did not know about it is new
-        // eg. call refresh servers
-        siridb_servers_refresh(siridb);
+    // We need to fetch the modify index from consul to see whatever we should update the servers
+    char uuid_str[37];
+    char buffer[PATH_MAX];
 
-        if((server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL) {
-            return BPROTO_AUTH_ERR_UNKNOWN_UUID;
-        }
-    } else {
-        sirinet_socket_decref(server->socket);
+    uuid_unparse(uuid, uuid_str);
+    snprintf(buffer,
+             PATH_MAX,
+             "curl -s %s:%i/v1/kv/%s%s/%s | jq '.[] | .ModifyIndex' -r",
+             siri.cfg->consul_address,
+             siri.cfg->consul_port,
+             siri.cfg->consul_kv_prefix,
+             SIRIDB_SERVERS_FN,
+             uuid_str
+    );
+
+    FILE* fp = popen(buffer, "r");
+    if (fp == NULL) {
+        log_error("Failed to authorize server. Could not execute command: '%s'.", buffer);
+        return BPROTO_AUTH_ERR_UNKNOWN_UUID;
     }
+
+    if(fgets(buffer, sizeof(buffer) - 1, fp) != NULL) {
+        uint64_t modify_idx = strtoull(buffer, NULL, 10);
+
+        if((server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL || server->modify_idx != modify_idx) {
+            // Update the servers list from consul
+            siridb_servers_refresh(siridb);
+
+            if((server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL ||
+                    server->modify_idx != modify_idx) {
+                pclose(fp);
+                return BPROTO_AUTH_ERR_UNKNOWN_UUID;
+            }
+        }
+    }
+    pclose(fp);
 
     ((sirinet_socket_t *) client->data)->siridb = siridb;
     ((sirinet_socket_t *) client->data)->origin = server;
 
     free(server->version);
     server->version = strdup(qp_version->via.raw);
-
 
     /* we must increment the server reference counter */
     siridb_server_incref(server);

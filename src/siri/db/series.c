@@ -1226,7 +1226,7 @@ static siridb_series_t * SERIES_new(
             series->end = 0;
             series->buffer = NULL;
             series->pool = pool;
-            series->reindex = 0;
+            series->reindex = siridb->is_backup;
             series->flags = 0;
             series->idx_len = 0;
             series->idx = NULL;

@@ -63,7 +63,7 @@ siridb_server_t * siridb_server_new(
         size_t address_len,
         uint16_t port,
         uint16_t pool,
-        uint16_t modify_idx)
+        uint64_t modify_idx)
 {
     siridb_server_t * server =
             (siridb_server_t *) malloc(sizeof(siridb_server_t));

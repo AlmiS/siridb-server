@@ -113,7 +113,7 @@ typedef struct siridb_server_s
     char * buffer_path;
     size_t buffer_size;
     /* Consul modify index */
-    uint16_t modify_idx;
+    uint64_t modify_idx;
 } siridb_server_t;
 
 typedef struct siridb_server_walker_s
@@ -135,7 +135,7 @@ siridb_server_t * siridb_server_new(
         size_t address_len,
         uint16_t port,
         uint16_t pool,
-        uint16_t modify_idx);
+        uint64_t modify_idx);
 
 int siridb_server_cmp(siridb_server_t * sa, siridb_server_t * sb);
 void siridb_server_connect(siridb_t * siridb, siridb_server_t * server);

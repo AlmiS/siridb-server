@@ -87,45 +87,6 @@ int siridb_servers_refresh(siridb_t *siridb) {
     log__info("Refreshing list of servers...");
 
     char buffer[PATH_MAX];
-    llist_t *alive_uuid_list = llist_new();
-
-    // Find uuids of alive nodes
-    /*snprintf(buffer,
-             PATH_MAX,
-             "curl -s -X GET %s:%i/v1/agent/members | jq '.[] | select(.Status==1) | .Tags.id' -r",
-             siri.cfg->consul_address,
-             siri.cfg->consul_port
-    );*/
-    snprintf(buffer,
-             PATH_MAX,
-             "curl %s:%i/v1/kv/%slocks?recurse | jq 'map( select( has(\"Session\"))) | .[] | .Key | ltrimstr(\"%slocks/\") | rtrimstr(\"/.lock\")' -r",
-             siri.cfg->consul_address,
-             siri.cfg->consul_port,
-             siri.cfg->consul_kv_prefix,
-             siri.cfg->consul_kv_prefix
-    );
-    log_debug(buffer);
-
-    FILE* fp = popen(buffer, "r");
-    if (fp == NULL) {
-        log_error("Failed to execute command to read healthchecks from consul agent: '%s'.", buffer);
-    } else {
-        while (fgets(buffer, sizeof(buffer) - 1, fp) != NULL) {
-            buffer[strcspn(buffer, "\n")] = 0;
-            char *uuid_str = malloc( sizeof(char) * ( 37 ) );
-            strncpy(uuid_str, buffer, 37);
-            llist_append(alive_uuid_list, uuid_str);
-            log_debug("Appending uuid %s", uuid_str);
-
-            else {
-                log_error("Could not parse uuid of a server during health-checking: '%s'.", buffer);
-            }
-        }
-    }
-
-    pclose(fp);
-
-    log_debug("Alive nodes %i", alive_uuid_list->len);
 
     /*Execute command to read servers from consul, Key = server-uuid, Value = address, Flag = port*/
     snprintf(buffer,
@@ -137,7 +98,7 @@ int siridb_servers_refresh(siridb_t *siridb) {
              SIRIDB_SERVERS_FN
     );
 
-    fp = popen(buffer, "r");
+    FILE* fp = popen(buffer, "r");
 
     if (fp == NULL) {
         log_error("Failed to execute command to read servers: '%s'.", buffer);
@@ -153,85 +114,59 @@ int siridb_servers_refresh(siridb_t *siridb) {
 
     size_t skipchars = strlen(buffer);
     int rc = 0;
-    int pool = 0;
+    uint16_t pool = 0;
     bool do_force_heartbeat = false;
 
     /* create a new server list */
     siridb_server_t *server;
     llist_t *servers_new = llist_new();
 
-    if (servers_new  == NULL) {
+    if (servers_new == NULL) {
+        pclose(fp);
+        siridb_servers_free(servers_new);
         return -1;  /* signal is raised */
     }
 
     while (rc == 0 && fgets(buffer, sizeof(buffer) - 1, fp) != NULL) {
-
         /*read uuid */
         uuid_t uuid;
 
         buffer[strcspn(buffer, "\n")] = 0;
         if (uuid_parse(buffer + skipchars, uuid) != 0) {
             log_error("Could not parse uuid of a server from consul '%s'.", buffer);
-            pclose(fp);
-            siridb_servers_free(servers_new);
-            /*siridb_pools_free(pools_new);*/
-            return -1;
+            rc = -1;
+            break;
         }
 
         /*read address*/
         if (fgets(buffer, sizeof(buffer) - 1, fp) == NULL) {
             log_error("Unexpected EOF when reading servers from consul. Expecting address");
-            pclose(fp);
-            siridb_servers_free(servers_new);
-            /*siridb_pools_free(pools_new);*/
-            return -1;
+            rc = -1;
+            break;
         }
         char *address = base64_decode(buffer, PATH_MAX);
 
         /* read port */
         if (fgets(buffer, sizeof(buffer) - 1, fp) == NULL) {
             log_critical("Unexpected EOF when reading servers from consul. Expecting port");
-            pclose(fp);
             free(address);
-            pclose(fp);
-            siridb_servers_free(servers_new);
-            /*siridb_pools_free(pools_new);*/
-            return -1;
+            rc = -1;
+            break;
         }
         uint16_t port = (uint16_t) strtoul(buffer, NULL, 10);
 
         /*read modify index */
         if (fgets(buffer, sizeof(buffer) - 1, fp) == NULL) {
-            log_critical("Unexpected EOF when reading servers from consul. Expecting port");
-            pclose(fp);
-            siridb_servers_free(servers_new);
-            /*siridb_pools_free(pools_new);*/
+            log_critical("Unexpected EOF when reading servers from consul. Expecting modify index");
             free(address);
-            return -1;
+            rc = -1;
+            break;
         }
-        uint16_t modify_idx = (uint16_t) strtoul(buffer, NULL, 10);
+        uint64_t modify_idx = strtoull(buffer, NULL, 10);
 
-        //Check if uuid is alive
-        /*llist_node_t *alive_uuid_node = alive_uuid_list->first;
-        bool alive = false;
-        while (alive_uuid_node != NULL)
-        {
-            char uuid_str[37];
-            uuid_unparse(uuid,uuid_str);
-            log_debug("Searching alive nodes uuid1: %s uuid2: %s", uuid_str, alive_uuid_node->data);
-            if(strcmp(uuid_str, alive_uuid_node->data) == 0) {
-                log_debug("uuid matched");
-                alive = true;
-                break;
-            }
-            alive_uuid_node = alive_uuid_node->next;
-        }
-        if(!alive) {
-            log_debug("Skipped adding failed server: %s", address);
-            continue;
-        }*/
-
-        if(siridb->servers == NULL || (server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL) {
+        if(     siridb->servers == NULL ||
+                (server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL ||
+                server->modify_idx != modify_idx) {
             server = siridb_server_new(
                     uuid,
                     address,
@@ -245,6 +180,7 @@ int siridb_servers_refresh(siridb_t *siridb) {
 
         if (server == NULL) {
             rc = -1;  /* signal is raised */
+            free(address);
         } else {
             siridb_server_incref(server);
 
@@ -252,36 +188,38 @@ int siridb_servers_refresh(siridb_t *siridb) {
             if (llist_append(servers_new, server)) {
                 siridb_server_decref(server);
                 rc = -1;  /* signal is raised */
+                free(address);
             } else if (uuid_compare(server->uuid, siridb->uuid) == 0) {
                 /* if this is me, bind server to siridb->server */
                 siridb->server = server;
-            } else {
+            } else if (server->promises == NULL) {
                 /* if this is not me, create promises */
                 server->promises = imap_new();
                 if (server->promises == NULL) {
                     rc = -1;  /* signal is raised */
+                    free(address);
                 }
             }
 
-            if (siridb_server_update_address(
+            if (rc == 0 && siridb_server_update_address(
                     siridb,
                     server,
                     address,
                     port) < 0)
             {
                 rc = -1;  /* logging is done, set result code to -1 */
+                free(address);
             }
         }
 
-        if(rc == 0) {
-            server->pool=pool;
-        }
         pool++;
     }
 
-    llist_free_cb(alive_uuid_list,(llist_cb) ALIVE_UUIDS_walk_free, NULL);
-
-    if(rc == 0) {
+    if(rc != 0) {
+        siridb_servers_free(servers_new);
+        fclose(fp);
+    }
+    else {
         llist_t *servers_old = siridb->servers;
         siridb->servers = servers_new;
 
@@ -297,31 +235,30 @@ int siridb_servers_refresh(siridb_t *siridb) {
             llist_walk(servers_new, (llist_cb) SERVERS_walk_free_old, servers_old);
             siridb_servers_free(servers_old);
         }
-    }
 
-    if (fgets(buffer, sizeof(buffer) - 1, fp) != NULL)
-    {
-        log_critical("Expected end of file in data from consul");
-        rc = -1;
-    }
+        if (fgets(buffer, sizeof(buffer) - 1, fp) != NULL)
+        {
+            log_critical("Expected end of file in data from consul");
+            rc = -1;
+        }
 
-    if (pclose(fp) / 256 != 0) {
-        log_critical("Command to retrieve servers from consul did not return exitcode 0.");
-        rc = -1;
-    }
-    else if (siridb->server == NULL)
-    {
-        log_critical("Could not find my own uuid in data from consul");
-        rc = -1;
-    }
+        if (pclose(fp) / 256 != 0) {
+            log_critical("Command to retrieve servers from consul did not return exitcode 0.");
+            rc = -1;
+        }
+        else if (siridb->server == NULL)
+        {
+            log_critical("Could not find my own uuid in data from consul");
+            rc = -1;
+        }
 
-    if(do_force_heartbeat) {
-        siri_heartbeat_force();
+        if(do_force_heartbeat) {
+            siri_heartbeat_force();
+        }
     }
 
     return rc;
 }
-
 
 /*
  * Destroy servers, parsing NULL is not allowed.

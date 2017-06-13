@@ -79,48 +79,39 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
     {
         siridb = (siridb_t *) siridb_node->data;
 
-        series_list = imap_2slist_ref(siridb->series_map);
-        uint8_t do_reindex = 0;
-        for(int i = 0; i < series_list->len; i++) {
-            //do_reindex += ((siridb_series_t*) series_list->data[i])->reindex;
-            if(((siridb_series_t*) series_list->data[i])->pool != siridb->server->pool) {
-                do_reindex++;
+        if (~siridb->flags & SIRIDB_FLAG_REINDEXING)
+        {
+            series_list = imap_2slist_ref(siridb->series_map);
+            if (series_list == NULL) {
+                log_error("Error allocating list for series from heartbeat task.");
+            }
+            else
+            {
+                for(int i = 0; i < series_list->len; i++) {
+                    if(((siridb_series_t*) series_list->data[i])->pool != siridb->server->pool) {
+                        siridb->reindex = siridb_reindex_open(siridb, 1);
+                        break;
+                    }
+                }
+                slist_free(series_list);
             }
         }
 
-        if (~siridb->flags & SIRIDB_FLAG_REINDEXING && do_reindex)
-        {
-            siridb->reindex = siridb_reindex_open(siridb, 1);
-        }
-
-        slist_free(series_list);
-
         if(handle != NULL && ~siridb->flags & SIRIDB_FLAG_REINDEXING) {
-            // Do we have dead nodes in our servers list
-            // Only do if this is not a forced heatbeat
-
+            // Only do if this is not a forced heartbeat and we are not reindexing anything
             snprintf(buffer,
                      PATH_MAX,
                      "curl -s -X GET %s:%i/v1/agent/members | jq '.[] | select(.Status==1) | .Tags.id' -r",
                      siri.cfg->consul_address,
                      siri.cfg->consul_port
             );
-            /*snprintf(buffer,
-                     PATH_MAX,
-                     "curl -s %s:%i/v1/kv/%slocks?recurse | jq 'map( select( has(\"Session\"))) | .[] | .Key | ltrimstr(\"%slocks/\") | rtrimstr(\"/.lock\")' -r",
-                     siri.cfg->consul_address,
-                     siri.cfg->consul_port,
-                     siri.cfg->consul_kv_prefix,
-                     siri.cfg->consul_kv_prefix
-            );*/
 
             log_debug(buffer);
 
             FILE *f = popen(buffer, "r");
             if (f == NULL) {
-                log_error("Failed to execute command to read healthchecks from consul agent: '%s'.", buffer);
+                log_error("Heartbeat task failed to execute command to read healthchecks from consul agent: '%s'.", buffer);
             } else {
-                int i=0;
                 while (fgets(buffer, sizeof(buffer) - 1, f) != NULL) {
                     uuid_t uuid;
                     buffer[strcspn(buffer, "\n")] = 0;
@@ -128,20 +119,15 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
                         log_error("Could not parse uuid of a server from consul '%s'.", buffer);
                         continue;
                     }
+                    if(siridb->is_backup && siridb_servers_by_uuid(siridb->servers, uuid) == siridb->server) {
+                        log_debug("Seems like the server which this backup was running for has come back online.");
+                        pclose(f);
+                        abort();
+                    }
                     if(siridb_servers_by_uuid(siridb->servers, uuid) == NULL) {
                         siridb_servers_refresh(siridb);
                         break;
                     }
-                    if(siridb_servers_by_uuid(siridb->servers, uuid)->modify_idx == 0) {
-                        siridb_servers_refresh(siridb);
-                        break;
-                    }
-                    if(siridb->is_backup && siridb_servers_by_uuid(siridb->servers, uuid) == siridb->server) {
-                        log_debug("Seems like the server which this backup was running for has come back online.");
-                        pclose(f);
-                        //abort();
-                    }
-
                 }
                 pclose(f);
             }
@@ -157,7 +143,7 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
             {
                 siridb_server_connect(siridb, server);
             }
-            else if (server->modify_idx != 0 && siridb_server_is_online(server))
+            else if (siridb_server_is_online(server))
             {
                 siridb_server_send_flags(server);
             }
@@ -173,4 +159,3 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
         siridb_node = siridb_node->next;
     }
 }
-

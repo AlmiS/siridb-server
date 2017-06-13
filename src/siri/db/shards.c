@@ -191,6 +191,7 @@ int siridb_shards_add_points(
                 }
                 else
                 {
+                    series->reindex = 1;
                     siridb_series_add_idx(
                             series,
                             shard,

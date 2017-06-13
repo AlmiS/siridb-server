@@ -253,16 +253,21 @@ static void OPTIMIZE_work(uv_work_t * work)
             char buffer[PATH_MAX];
             uuid_unparse(siridb->uuid,uuid_str);
 
-            snprintf(buffer,
+            if(siri_backup_enable(&siri, siridb) == 0) {
+                snprintf(buffer,
                      PATH_MAX,
                      "brumefs put %s%s %s",
                      siri.cfg->consul_kv_prefix,
                      uuid_str,
                      siridb->dbpath
-            );
-            FILE* fp = popen(buffer, "r");
-            if (fp == NULL || pclose(fp) / 256 != 0) {
-                log_error("Failed hash database %s to brumefs", siridb->dbpath);
+                );
+
+                FILE* fp = popen(buffer, "r");
+                if (fp == NULL || pclose(fp) / 256 != 0) {
+                    log_error("Failed hash database %s to brumefs", siridb->dbpath);
+                }
+
+                siri_backup_disable(&siri,siridb);
             }
         }
 

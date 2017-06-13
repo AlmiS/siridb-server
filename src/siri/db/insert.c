@@ -787,13 +787,15 @@ static void INSERT_local_task(uv_async_t * handle)
                 &ilocal->pcache))
         {
             ilocal->status = INSERT_LOCAL_ERROR;
-        } else if (siridb->is_backup) {
-            siridb_series_t ** series = (siridb_series_t**) ct_get_sure(
-                            siridb->series,
-                            ilocal->qp_series_name.via.raw);
+        }
 
+        siridb_series_t ** series = (siridb_series_t**) ct_get_sure(
+                siridb->series,
+                ilocal->qp_series_name.via.raw);
+
+        if ((*series)->reindex == 1) {
             (*series)->pool = ilocal->source_server->pool;
-            (*series)->reindex = 1;
+            (*series)->reindex = 0;
         }
     }
     uv_mutex_unlock(&siridb->series_mutex);
