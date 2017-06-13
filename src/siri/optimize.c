@@ -194,7 +194,7 @@ static void OPTIMIZE_work(uv_work_t * work)
         log_debug("Start optimizing database '%s'", siridb->dbname);
 #endif
 
-        uv_mutex_lock(&siridb->shards_mutex);
+        /*uv_mutex_lock(&siridb->shards_mutex);
 
         slshards = imap_2slist_ref(siridb->shards);
 
@@ -202,7 +202,7 @@ static void OPTIMIZE_work(uv_work_t * work)
 
         if (slshards == NULL)
         {
-            return;  /* signal is raised */
+            return;  *//* signal is raised *//*
         }
 
         sleep(1);
@@ -211,7 +211,7 @@ static void OPTIMIZE_work(uv_work_t * work)
         {
             shard = (siridb_shard_t *) slshards->data[i];
 #ifdef DEBUG
-            /* SIRIDB_SHARD_IS_LOADING cannot be set at this point */
+            *//* SIRIDB_SHARD_IS_LOADING cannot be set at this point *//*
             assert (~shard->flags & SIRIDB_SHARD_IS_LOADING);
 #endif
             if (    !siri_err &&
@@ -228,20 +228,20 @@ static void OPTIMIZE_work(uv_work_t * work)
                 }
                 else
                 {
-                    /* signal is raised */
+                    *//* signal is raised *//*
                     log_critical(
                         "Optimizing shard id %" PRIu64 " has failed with a "
                         "critical error", shard->id);
                 }
             }
 
-            /* decrement ref for the shard which was incremented earlier */
+            *//* decrement ref for the shard which was incremented earlier *//*
             siridb_shard_decref(shard);
         }
 
 
         slist_free(slshards);
-
+*/
         if (siri_optimize_wait() == SIRI_OPTIMIZE_CANCELLED)
         {
             break;
@@ -253,7 +253,7 @@ static void OPTIMIZE_work(uv_work_t * work)
             char buffer[PATH_MAX];
             uuid_unparse(siridb->uuid,uuid_str);
 
-            if(siri_backup_enable(&siri, siridb) == 0) {
+
                 snprintf(buffer,
                      PATH_MAX,
                      "brumefs put %s%s %s",
@@ -266,9 +266,6 @@ static void OPTIMIZE_work(uv_work_t * work)
                 if (fp == NULL || pclose(fp) / 256 != 0) {
                     log_error("Failed hash database %s to brumefs", siridb->dbpath);
                 }
-
-                siri_backup_disable(&siri,siridb);
-            }
         }
 
 #ifdef DEBUG
