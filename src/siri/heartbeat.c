@@ -22,6 +22,7 @@
 #ifdef DEBUG
 #include <siri/db/series.h>
 #include <siri/db/servers.h>
+#include <zconf.h>
 
 #endif
 
@@ -98,6 +99,8 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
         }
 
         if(handle != NULL && ~siridb->flags & SIRIDB_FLAG_REINDEXING) {
+            siridb->heartbeats ++;
+
             // Only do if this is not a forced heartbeat and we are not reindexing anything
             snprintf(buffer,
                      PATH_MAX,
@@ -119,10 +122,9 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
                         log_error("Could not parse uuid of a server from consul '%s'.", buffer);
                         continue;
                     }
-                    if(siridb->is_backup && siridb_servers_by_uuid(siridb->servers, uuid) == siridb->server) {
+                    if(siridb->heartbeats > 3 && siridb->is_backup && siridb_servers_by_uuid(siridb->servers, uuid) == siridb->server) {
                         log_debug("Seems like the server which this backup was running for has come back online.");
-                        pclose(f);
-                        abort();
+                        kill(getpid(), 9);
                     }
                     if(siridb_servers_by_uuid(siridb->servers, uuid) == NULL) {
                         siridb_servers_refresh(siridb);

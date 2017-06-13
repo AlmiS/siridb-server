@@ -128,6 +128,7 @@ siridb_t * siridb_new(siri_cfg_t *cfg, int lock_flags)
     }
 
     siridb->is_backup = cfg->is_backup;
+    siridb->heartbeats = 0;
 
     log_info("Start loading database: '%s'", siridb->dbname);
 
