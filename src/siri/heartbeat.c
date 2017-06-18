@@ -123,7 +123,7 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
                     }
                     if(siridb->heartbeats > 3 && siridb->is_backup && siridb_servers_by_uuid(siridb->servers, uuid) == siridb->server) {
                         log_debug("Seems like the server which this backup was running for has come back online.");
-                        kill(getpid(), 9);
+                        //kill(getpid(), 9);
                     }
                     if(siridb_servers_by_uuid(siridb->servers, uuid) == NULL) {
                         siridb_servers_refresh(siridb);
