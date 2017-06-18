@@ -914,12 +914,21 @@ int siridb_shard_optimize(siridb_shard_t * shard, siridb_t * siridb)
 
         // Copy new shard to backup dir
         char buffer[PATH_MAX];
+
+        // length of 2**64 - 1, +1 for nul.
+        char filename[21];
+        // copy to buffer
+        sprintf(filename, "%" PRIu64, shard->id);
+
         snprintf(buffer,
                  PATH_MAX,
-                 "cp %s %s/backup/shards/%ld.sdb",
+                 "cp %s %s/backup/shards/%s.sdb",
                  new_shard->fn,
                  siridb->dbpath,
-                 new_shard->id);
+                 filename);
+
+        log_debug("Shard cp command: %s", buffer);
+        log_debug("Shard id %i: ", shard->id);
 
         FILE* fp = popen(buffer, "r");
         if (fp == NULL || pclose(fp) / 256 != 0) {
