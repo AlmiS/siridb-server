@@ -230,7 +230,7 @@ static void OPTIMIZE_work(uv_work_t * work)
 #endif
             if (    !siri_err &&
                     optimize.status != SIRI_OPTIMIZE_CANCELLED &&
-                    (shard->flags != SIRIDB_SHARD_OK || siridb->force_optimize) &&
+                    //(shard->flags != SIRIDB_SHARD_OK || siridb->force_optimize) &&
                     !siridb->is_backup &&
                     (~shard->flags & SIRIDB_SHARD_IS_REMOVED))
             {
