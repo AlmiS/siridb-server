@@ -560,13 +560,16 @@ int siridb_series_drop_commit(siridb_t * siridb, siridb_series_t * series)
         rc = -1;
     };
 
-    char buffer[PATH_MAX];
-    char uuid_str[37];
-    uuid_unparse(siridb->pools->pool[series->pool].server[0]->uuid, uuid_str);
+    if(siridb->pools != NULL) {
 
-    if(siridb->reindex != NULL && series->id == siridb->reindex->series->id) {
+    }
+    char buffer[PATH_MAX];
+
+    if(siridb->pools != NULL && siridb->reindex != NULL && series->id == siridb->reindex->series->id) {
         /* This series has been re-indexed so just update the owner.
         Update series in consul. */
+        char uuid_str[37];
+        uuid_unparse(siridb->pools->pool[series->pool].server[0]->uuid, uuid_str);
 
         snprintf(buffer,
                  PATH_MAX,

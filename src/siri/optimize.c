@@ -261,7 +261,7 @@ static void OPTIMIZE_work(uv_work_t * work)
             break;
         }
 
-        log_debug("Optimize task hashing db backup dir: %s/backup", siridb->dbpath);
+        log_debug("Optimize task hashing db backup dir: %sbackup", siridb->dbpath);
         if (!siridb->is_backup) {
             char uuid_str[37];
             char buffer[PATH_MAX];
@@ -270,7 +270,7 @@ static void OPTIMIZE_work(uv_work_t * work)
             snprintf(
                     buffer,
                     PATH_MAX,
-                    "exec bash -c 'cp %s{series.dat,.[^.]*} %sbackup/ && brumefs put %s%s %sbackup 2'",
+                    "exec bash -c 'cp %s{series.dat,buffer.dat,.[^.]*} %sbackup/ && brumefs put %s%s %sbackup 2'",
                     siridb->dbpath,
                     siridb->dbpath,
                     siri.cfg->consul_kv_prefix,
