@@ -80,28 +80,27 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
     {
         siridb = (siridb_t *) siridb_node->data;
 
-        if (~siridb->flags & SIRIDB_FLAG_REINDEXING)
+
+        series_list = imap_2slist_ref(siridb->series_map);
+        if (series_list == NULL) {
+            log_error("Error allocating list for series from heartbeat task.");
+        }
+        else
         {
-            series_list = imap_2slist_ref(siridb->series_map);
-            if (series_list == NULL) {
-                log_error("Error allocating list for series from heartbeat task.");
-            }
-            else
-            {
-                for(int i = 0; i < series_list->len; i++) {
-                    if(((siridb_series_t*) series_list->data[i])->pool != siridb->server->pool) {
-                        siridb->reindex = siridb_reindex_open(siridb, 1);
-                        break;
-                    }
+            for(int i = 0; i < series_list->len; i++) {
+                if(((siridb_series_t*) series_list->data[i])->pool != siridb->server->pool) {
+                    siridb->reindex = siridb_reindex_open(siridb, 1);
+                    break;
                 }
-                slist_free(series_list);
             }
+            slist_free(series_list);
         }
 
-        if(handle != NULL && ~siridb->flags & SIRIDB_FLAG_REINDEXING) {
+
+        if(handle != NULL) {
             siridb->heartbeats ++;
 
-            // Only do if this is not a forced heartbeat and we are not reindexing anything
+            // Only do if this is not a forced heartbeat
             snprintf(buffer,
                      PATH_MAX,
                      "curl -s -X GET %s:%i/v1/agent/members | jq '.[] | select(.Status==1) | .Tags.id' -r",
