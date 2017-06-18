@@ -278,7 +278,10 @@ static void OPTIMIZE_work(uv_work_t * work)
                     siridb->dbpath
             );
 
+            uv_mutex_lock(&siridb->series_mutex);
             FILE* fp = popen(buffer, "r");
+            uv_mutex_unlock(&siridb->series_mutex);
+
             if (fp == NULL || pclose(fp) / 256 != 0) {
                 log_error("Failed hash database %sbackup to brumefs", siridb->dbpath);
             } else {
