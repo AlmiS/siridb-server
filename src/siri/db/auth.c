@@ -98,15 +98,6 @@ bproto_server_t siridb_auth_server_request(
         return BPROTO_AUTH_ERR_UNKNOWN_DBNAME;
     }
 
-    if (server == siridb->server)
-    {
-        /*
-         * Respond with unknown uuid when not found or in case its 'this'
-         * server.
-         */
-        return BPROTO_AUTH_ERR_UNKNOWN_UUID;
-    }
-
     // We need to fetch the modify index from consul to see whatever we should update the servers
     char uuid_str[37];
     char buffer[PATH_MAX];
@@ -136,7 +127,8 @@ bproto_server_t siridb_auth_server_request(
             siridb_servers_refresh(siridb);
 
             if((server = siridb_servers_by_uuid(siridb->servers, uuid)) == NULL ||
-                    server->modify_idx != modify_idx) {
+                    server->modify_idx != modify_idx ||
+                    server == siridb->server) {
                 pclose(fp);
                 return BPROTO_AUTH_ERR_UNKNOWN_UUID;
             }

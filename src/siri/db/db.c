@@ -128,6 +128,7 @@ siridb_t * siridb_new(siri_cfg_t *cfg, int lock_flags)
     }
 
     siridb->is_backup = cfg->is_backup;
+    siridb->force_optimize = 1 - siridb->is_backup;
     siridb->heartbeats = 0;
 
     log_info("Start loading database: '%s'", siridb->dbname);
@@ -285,7 +286,7 @@ int siridb_from_consul(
     (*siridb)->buffer_len = (*siridb)->buffer_size / sizeof(siridb_point_t);
 
     /* bind number duration to SiriDB */
-    (*siridb)->duration_num = (uint64_t) 3600; /* 1 hour */
+    (*siridb)->duration_num = (uint64_t) 86400; /* 1 day */
 
     /* calculate 'shard_mask_num' based on number duration */
     (*siridb)->shard_mask_num =

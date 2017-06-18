@@ -186,6 +186,20 @@ static void OPTIMIZE_work(uv_work_t * work)
         return;
     }
 
+    /*Make sure backup folder is exists and is empty*/
+    char buffer[PATH_MAX];
+    snprintf(buffer,
+             PATH_MAX,
+//             "mkdir -p %sbackup/shards && rm -r %sbackup/*",
+             "mkdir -p %sbackup/shards",
+             siridb->dbpath
+    );
+    FILE* fp = popen(buffer, "r");
+    if (fp == NULL || pclose(fp) / 256 != 0) {
+        log_error("Failed to create empty backup dir with command %s", buffer);
+    }
+
+
     for (size_t i = 0; i < slsiridb->len; i++)
     {
         siridb = (siridb_t *) slsiridb->data[i];
@@ -194,7 +208,7 @@ static void OPTIMIZE_work(uv_work_t * work)
         log_debug("Start optimizing database '%s'", siridb->dbname);
 #endif
 
-        /*uv_mutex_lock(&siridb->shards_mutex);
+        uv_mutex_lock(&siridb->shards_mutex);
 
         slshards = imap_2slist_ref(siridb->shards);
 
@@ -202,7 +216,7 @@ static void OPTIMIZE_work(uv_work_t * work)
 
         if (slshards == NULL)
         {
-            return;  *//* signal is raised *//*
+            return;   /*signal is raised */
         }
 
         sleep(1);
@@ -211,12 +225,13 @@ static void OPTIMIZE_work(uv_work_t * work)
         {
             shard = (siridb_shard_t *) slshards->data[i];
 #ifdef DEBUG
-            *//* SIRIDB_SHARD_IS_LOADING cannot be set at this point *//*
+             /*SIRIDB_SHARD_IS_LOADING cannot be set at this point*/
             assert (~shard->flags & SIRIDB_SHARD_IS_LOADING);
 #endif
             if (    !siri_err &&
                     optimize.status != SIRI_OPTIMIZE_CANCELLED &&
-                    shard->flags != SIRIDB_SHARD_OK &&
+                    (shard->flags != SIRIDB_SHARD_OK || siridb->force_optimize) &&
+                    !siridb->is_backup &&
                     (~shard->flags & SIRIDB_SHARD_IS_REMOVED))
             {
                 log_info("Start optimizing shard id %" PRIu64 " (%" PRIu8 ")",
@@ -228,44 +243,47 @@ static void OPTIMIZE_work(uv_work_t * work)
                 }
                 else
                 {
-                    *//* signal is raised *//*
+                     /*signal is raised*/
                     log_critical(
                         "Optimizing shard id %" PRIu64 " has failed with a "
                         "critical error", shard->id);
                 }
             }
 
-            *//* decrement ref for the shard which was incremented earlier *//*
+/*             decrement ref for the shard which was incremented earlier*/
             siridb_shard_decref(shard);
         }
 
 
         slist_free(slshards);
-*/
         if (siri_optimize_wait() == SIRI_OPTIMIZE_CANCELLED)
         {
             break;
         }
 
-        log_debug("Optimize task hashing db: %s", siridb->dbpath);
+        log_debug("Optimize task hashing db backup dir: %s/backup", siridb->dbpath);
         if (!siridb->is_backup) {
             char uuid_str[37];
             char buffer[PATH_MAX];
             uuid_unparse(siridb->uuid,uuid_str);
 
+            snprintf(
+                    buffer,
+                    PATH_MAX,
+                    "exec bash -c 'cp %s{series.dat,.[^.]*} %sbackup/ && brumefs put %s%s %sbackup 2'",
+                    siridb->dbpath,
+                    siridb->dbpath,
+                    siri.cfg->consul_kv_prefix,
+                    uuid_str,
+                    siridb->dbpath
+            );
 
-                snprintf(buffer,
-                     PATH_MAX,
-                     "brumefs put %s%s %s",
-                     siri.cfg->consul_kv_prefix,
-                     uuid_str,
-                     siridb->dbpath
-                );
-
-                FILE* fp = popen(buffer, "r");
-                if (fp == NULL || pclose(fp) / 256 != 0) {
-                    log_error("Failed hash database %s to brumefs", siridb->dbpath);
-                }
+            FILE* fp = popen(buffer, "r");
+            if (fp == NULL || pclose(fp) / 256 != 0) {
+                log_error("Failed hash database %sbackup to brumefs", siridb->dbpath);
+            } else {
+                siridb->force_optimize = 0;
+            }
         }
 
 #ifdef DEBUG

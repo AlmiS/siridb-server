@@ -133,6 +133,9 @@ void siri_cfg_init(siri_t *siri) {
             1,
             &tmp);
     siri_cfg.is_backup = (uint8_t) tmp;
+    if(siri->cfg->is_backup) {
+        siri->cfg->optimize_interval = 0;
+    }
 
     /* free parser */
     cfgparser_free(cfgparser);

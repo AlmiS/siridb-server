@@ -275,7 +275,7 @@ siridb_shard_t *  siridb_shard_create(
     }
     shard->id = id;
     shard->ref = 1;
-    shard->flags = SIRIDB_SHARD_OK;
+    shard->flags = replacing == NULL ? SIRIDB_SHARD_MANUAL_OPTIMIZE : SIRIDB_SHARD_OK;
     shard->tp = tp;
     shard->replacing = replacing;
     shard->size = HEADER_SIZE;
@@ -912,8 +912,23 @@ int siridb_shard_optimize(siridb_shard_t * shard, siridb_t * siridb)
         /* remove the old shard file, this is not critical */
         unlink(new_shard->replacing->fn);
 
+        // Copy new shard to backup dir
+        char buffer[PATH_MAX];
+        snprintf(buffer,
+                 PATH_MAX,
+                 "cp %s %s/backup/shards/%ld.sdb",
+                 new_shard->fn,
+                 siridb->dbpath,
+                 new_shard->id);
+
+        FILE* fp = popen(buffer, "r");
+        if (fp == NULL || pclose(fp) / 256 != 0) {
+            free(tmp);
+            log_critical("Failed to copy shard with command %s", buffer);
+            ERR_FILE
+        }
         /* rename the temporary shard file to the correct shard filename */
-        if (rename(new_shard->fn, new_shard->replacing->fn))
+        else if (rename(new_shard->fn, new_shard->replacing->fn))
         {
             free(tmp);
             log_critical(

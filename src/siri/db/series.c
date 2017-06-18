@@ -292,7 +292,9 @@ siridb_series_t * siridb_series_new(
 
         if(strlen(uuid_str) != 36) {
             log_error("Error unparsing own uuid: '%s' to string", siridb->uuid);
-            return -1;
+            siridb__series_free(series);
+            series = NULL;
+            return NULL;
         }
 
         snprintf(buffer,

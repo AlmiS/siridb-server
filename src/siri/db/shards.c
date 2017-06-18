@@ -49,6 +49,8 @@ int siridb_shards_load(siridb_t * siridb)
 
     log_info("Loading shards");
 
+    // TODO cp shard dir to backup
+
     SIRIDB_GET_FN(path, siridb->dbpath, SIRIDB_SHARDS_PATH);
 
     if (strlen(path) >= PATH_MAX - SIRIDB_MAX_SHARD_FN_LEN - 1)
@@ -106,7 +108,6 @@ int siridb_shards_load(siridb_t * siridb)
         {
            log_error("Error while loading shard: '%s'", shard_list[n]->d_name);
 
-            char buffer[PATH_MAX];
             snprintf(buffer,
                      PATH_MAX,
                      "rm -f %s",
@@ -114,13 +115,13 @@ int siridb_shards_load(siridb_t * siridb)
             );
             FILE* fp = popen(buffer, "r");
 
-            if(fp == NULL || pclose(fp) / 256 != 0)
+            if(pclose(fp) / 256 != 0)
             {
-                log_error("Error: unable to delete the shard");
+                log_info("Shard deleted successfully");
             }
             else
             {
-                log_info("Shard deleted successfully");
+                log_error("Error: unable to delete the shard");
             }
            rc = -1;
            break;
