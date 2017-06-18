@@ -82,7 +82,6 @@ int siridb_servers_load(siridb_t *siridb) {
     return siridb_servers_refresh(siridb);
 }
 
-// TODO do we need a synchronized lock on this method?
 int siridb_servers_refresh(siridb_t *siridb) {
     log__info("Refreshing list of servers...");
 

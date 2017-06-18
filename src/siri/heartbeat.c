@@ -89,7 +89,7 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
         {
             for(int i = 0; i < series_list->len; i++) {
                 if(((siridb_series_t*) series_list->data[i])->pool != siridb->server->pool) {
-                    siridb->reindex = siridb_reindex_open(siridb, 1);
+                    //siridb->reindex = siridb_reindex_open(siridb, 1);
                     break;
                 }
             }
@@ -123,7 +123,7 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
                     }
                     if(siridb->heartbeats > 3 && siridb->is_backup && siridb_servers_by_uuid(siridb->servers, uuid) == siridb->server) {
                         log_debug("Seems like the server which this backup was running for has come back online.");
-                        //kill(getpid(), 9);
+                        kill(getpid(), 9);
                     }
                     if(siridb_servers_by_uuid(siridb->servers, uuid) == NULL) {
                         siridb_servers_refresh(siridb);
@@ -154,7 +154,7 @@ static void HEARTBEAT_cb(uv_timer_t * handle)
 
         if (siridb->reindex != NULL)
         {
-            siridb_reindex_start(siridb->reindex->timer);
+            //siridb_reindex_start(siridb->reindex->timer);
         }
 
         siridb_node = siridb_node->next;
